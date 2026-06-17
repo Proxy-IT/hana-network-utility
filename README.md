@@ -1,4 +1,4 @@
-# 🌸 Hana — Network Utility
+# Hana — Network Utility
 
 > ⚠️ **Legal Notice:** Hana is intended for use only on networks you own or have explicit
 > permission to test. Unauthorized network scanning may be illegal in your jurisdiction.
