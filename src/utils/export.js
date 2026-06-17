@@ -195,3 +195,190 @@ export function exportSweepCsv({ baseIp, start, end, results }) {
   const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
   downloadFile(`sweep_${baseIp}_${timestamp()}.csv`, csv, 'text/csv');
 }
+
+// ── IP INFO exports ───────────────────────────────────────────────────────────
+
+export function exportMyIpTxt(data) {
+  const ts = new Date().toLocaleString();
+  const lines = [
+    '========================================',
+    '  Hana - Network Utility',
+    '  My Public IP Report',
+    '========================================',
+    `Timestamp  : ${ts}`,
+    '',
+    '--- Public IP Details ---',
+    `IP Address : ${data.ip || '—'}`,
+    `ISP / Org  : ${data.isp || '—'}`,
+    `ASN        : ${data.asn || '—'}`,
+    `Country    : ${data.country || '—'} (${data.countryCode || '—'})`,
+    `Region     : ${data.region || '—'} (${data.regionCode || '—'})`,
+    `City       : ${data.city || '—'}`,
+    `Postal     : ${data.postal || '—'}`,
+    `Timezone   : ${data.timezone || '—'}`,
+    `UTC Offset : ${data.utcOffset || '—'}`,
+    `Latitude   : ${data.latitude || '—'}`,
+    `Longitude  : ${data.longitude || '—'}`,
+  ];
+  downloadFile(`my_public_ip_${timestamp()}.txt`, lines.join('\n'));
+}
+
+export function exportMyIpCsv(data) {
+  const ts = new Date().toLocaleString();
+  const rows = [
+    ['Field', 'Value', 'Timestamp'],
+    ['IP Address',  data.ip          || '', ts],
+    ['ISP / Org',   data.isp         || '', ''],
+    ['ASN',         data.asn         || '', ''],
+    ['Country',     data.country     || '', ''],
+    ['Country Code',data.countryCode || '', ''],
+    ['Region',      data.region      || '', ''],
+    ['Region Code', data.regionCode  || '', ''],
+    ['City',        data.city        || '', ''],
+    ['Postal',      data.postal      || '', ''],
+    ['Timezone',    data.timezone    || '', ''],
+    ['UTC Offset',  data.utcOffset   || '', ''],
+    ['Latitude',    data.latitude    || '', ''],
+    ['Longitude',   data.longitude   || '', ''],
+  ];
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  downloadFile(`my_public_ip_${timestamp()}.csv`, csv, 'text/csv');
+}
+
+export function exportIpLookupTxt(data) {
+  const ts = new Date().toLocaleString();
+  const lines = [
+    '========================================',
+    '  Hana - Network Utility',
+    '  IP Lookup Report',
+    '========================================',
+    `Timestamp  : ${ts}`,
+    '',
+    '--- Lookup Results ---',
+    `IP Address : ${data.ip          || '—'}`,
+    `ISP / Org  : ${data.isp         || '—'}`,
+    `ASN        : ${data.asn         || '—'}`,
+    `Country    : ${data.country     || '—'} (${data.countryCode || '—'})`,
+    `Region     : ${data.region      || '—'} (${data.regionCode  || '—'})`,
+    `City       : ${data.city        || '—'}`,
+    `Postal     : ${data.postal      || '—'}`,
+    `Timezone   : ${data.timezone    || '—'}`,
+    `UTC Offset : ${data.utcOffset   || '—'}`,
+    `Latitude   : ${data.latitude    || '—'}`,
+    `Longitude  : ${data.longitude   || '—'}`,
+  ];
+  downloadFile(`ip_lookup_${data.ip}_${timestamp()}.txt`, lines.join('\n'));
+}
+
+export function exportIpLookupCsv(data) {
+  const ts = new Date().toLocaleString();
+  const rows = [
+    ['Field', 'Value', 'Timestamp'],
+    ['IP Address',  data.ip          || '', ts],
+    ['ISP / Org',   data.isp         || '', ''],
+    ['ASN',         data.asn         || '', ''],
+    ['Country',     data.country     || '', ''],
+    ['Country Code',data.countryCode || '', ''],
+    ['Region',      data.region      || '', ''],
+    ['Region Code', data.regionCode  || '', ''],
+    ['City',        data.city        || '', ''],
+    ['Postal',      data.postal      || '', ''],
+    ['Timezone',    data.timezone    || '', ''],
+    ['UTC Offset',  data.utcOffset   || '', ''],
+    ['Latitude',    data.latitude    || '', ''],
+    ['Longitude',   data.longitude   || '', ''],
+  ];
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  downloadFile(`ip_lookup_${data.ip}_${timestamp()}.csv`, csv, 'text/csv');
+}
+
+export function exportWhoisTxt({ query, data }) {
+  const ts = new Date().toLocaleString();
+  const lines = [
+    '========================================',
+    '  Hana - Network Utility',
+    '  WhoIs Report',
+    '========================================',
+    `Query      : ${query}`,
+    `Timestamp  : ${ts}`,
+    `Source     : ${data.source || 'unknown'}`,
+    '',
+  ];
+
+  if (data.rdap) {
+    const d = data.rdap;
+    const events = d.events || [];
+    const getEvent = (type) => events.find(e => e.eventAction === type)?.eventDate;
+    const nameservers = (d.nameservers || []).map(ns => ns.ldhName).join(', ');
+    const entities = d.entities || [];
+    const registrar  = entities.find(e => e.roles?.includes('registrar'));
+    const registrant = entities.find(e => e.roles?.includes('registrant'));
+
+    lines.push('--- WhoIs Details (RDAP) ---');
+    lines.push(`Domain      : ${d.ldhName || query}`);
+    lines.push(`Status      : ${(d.status || []).join(', ')}`);
+    lines.push(`Registrar   : ${registrar?.vcardArray?.[1]?.find(v => v[0] === 'fn')?.[3] || registrar?.handle || '—'}`);
+    lines.push(`Created     : ${getEvent('registration') ? new Date(getEvent('registration')).toLocaleDateString() : '—'}`);
+    lines.push(`Updated     : ${getEvent('last changed')  ? new Date(getEvent('last changed')).toLocaleDateString()  : '—'}`);
+    lines.push(`Expires     : ${getEvent('expiration')    ? new Date(getEvent('expiration')).toLocaleDateString()    : '—'}`);
+    lines.push(`Name Servers: ${nameservers || '—'}`);
+    lines.push(`Registrant  : ${registrant?.vcardArray?.[1]?.find(v => v[0] === 'fn')?.[3] || '—'}`);
+  } else if (data.raw) {
+    lines.push('--- Raw WhoIs Output ---');
+    lines.push(data.raw);
+  }
+
+  downloadFile(`whois_${query.replace(/[^a-zA-Z0-9.-]/g, '_')}_${timestamp()}.txt`, lines.join('\n'));
+}
+
+export function exportWhoisCsv({ query, data }) {
+  const ts = new Date().toLocaleString();
+  let rows = [['Field', 'Value', 'Query', 'Timestamp']];
+
+  if (data.rdap) {
+    const d = data.rdap;
+    const events = d.events || [];
+    const getEvent = (type) => events.find(e => e.eventAction === type)?.eventDate;
+    const nameservers = (d.nameservers || []).map(ns => ns.ldhName).join(', ');
+    const entities = d.entities || [];
+    const registrar  = entities.find(e => e.roles?.includes('registrar'));
+    const registrant = entities.find(e => e.roles?.includes('registrant'));
+
+    rows = rows.concat([
+      ['Domain',       d.ldhName || query,  query, ts],
+      ['Status',       (d.status || []).join(', '), '', ''],
+      ['Registrar',    registrar?.vcardArray?.[1]?.find(v => v[0] === 'fn')?.[3] || '', '', ''],
+      ['Created',      getEvent('registration') ? new Date(getEvent('registration')).toLocaleDateString() : '', '', ''],
+      ['Updated',      getEvent('last changed')  ? new Date(getEvent('last changed')).toLocaleDateString()  : '', '', ''],
+      ['Expires',      getEvent('expiration')    ? new Date(getEvent('expiration')).toLocaleDateString()    : '', '', ''],
+      ['Name Servers', nameservers, '', ''],
+      ['Registrant',   registrant?.vcardArray?.[1]?.find(v => v[0] === 'fn')?.[3] || '', '', ''],
+    ]);
+  } else if (data.raw) {
+    // Parse key fields from raw WhoIs
+    const extract = (patterns) => {
+      for (const pattern of patterns) {
+        const match = data.raw.match(new RegExp(`${pattern}:\\s*(.+)`, 'im'));
+        if (match && match[1].trim() && match[1].trim() !== 'REDACTED FOR PRIVACY') {
+          return match[1].trim();
+        }
+      }
+      return '';
+    };
+    rows = rows.concat([
+      ['Domain Name',       extract(['Domain Name', 'domain']),                          query, ts],
+      ['Registrar',         extract(['Registrar', 'registrar']),                         '', ''],
+      ['Created',           extract(['Creation Date', 'Created On', 'created']),         '', ''],
+      ['Updated',           extract(['Updated Date', 'Last Modified', 'changed']),       '', ''],
+      ['Expires',           extract(['Registry Expiry Date', 'Expiration Date', 'expires']), '', ''],
+      ['Status',            extract(['Domain Status', 'Status', 'status']),              '', ''],
+      ['Name Servers',      extract(['Name Server', 'nserver']),                         '', ''],
+      ['Registrant Org',    extract(['Registrant Organization', 'Registrant']),          '', ''],
+      ['Registrant Country',extract(['Registrant Country']),                             '', ''],
+      ['DNSSEC',            extract(['DNSSEC']),                                         '', ''],
+    ]);
+  }
+
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  downloadFile(`whois_${query.replace(/[^a-zA-Z0-9.-]/g, '_')}_${timestamp()}.csv`, csv, 'text/csv');
+}

@@ -1,6 +1,6 @@
 {
   "name": "hana-network-utility",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Hana - Network Utility",
   "author": "Your Name",
   "main": "electron/main.js",

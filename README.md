@@ -1,4 +1,5 @@
-# NetPulse — Network Utility App
+<<<<<<< HEAD
+# Hana — Network Utility App
 
 A lightweight cross-platform network utility built with Electron + React.
 
@@ -90,3 +91,15 @@ Each tool is a self-contained React component in `src/components/`. To add a new
 2. Add it to the `VIEWS` map in `App.js`
 3. Add a nav entry to the `TABS` array in `Sidebar.js`
 4. If it needs system access, add an IPC handler in `electron/main.js` and expose it in `preload.js`
+=======
+# hana-network-utility
+Lightweight Windows network diagnostic tool — ping, traceroute, subnet sweep, subnet calculator and latency reference in one clean interface
+>>>>>>> 3fa6308515fed5a17522d7f201d39cc392e83eb6
+## Version History
+
+| Version | Highlights |
+|---|---|
+| v1.3.0 | Multi-Ping monitor for up to 5 hosts, IP Info & WhoIs module with export |
+| v1.2.0 | Rebranded to Hana, CSV/TXT export on all tools, redesigned subnet sweep results |
+| v1.1.0 | Continuous ping with live RTT graph, in-app instructions, Windows path fixes |
+| v1.0.0 | Initial release |
