@@ -1,0 +1,53 @@
+{
+  "name": "hana-network-utility",
+  "version": "1.2.0",
+  "description": "Hana - Network Utility",
+  "author": "Your Name",
+  "main": "electron/main.js",
+  "homepage": "./",
+  "scripts": {
+    "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && electron .\"",
+    "react-start": "react-scripts start",
+    "react-build": "react-scripts build",
+    "build": "npm run react-build && electron-builder",
+    "electron": "electron ."
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.hana.networkutility",
+    "productName": "Hana - Network Utility",
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version"]
+  }
+}
