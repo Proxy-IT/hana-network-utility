@@ -1,105 +1,182 @@
-<<<<<<< HEAD
-# Hana — Network Utility App
+# 🌸 Hana — Network Utility
 
-A lightweight cross-platform network utility built with Electron + React.
+> ⚠️ **Legal Notice:** Hana is intended for use only on networks you own or have explicit
+> permission to test. Unauthorized network scanning may be illegal in your jurisdiction.
+> The developer accepts no responsibility for misuse. See [TERMS.md](TERMS.md) for full terms of use.
 
-## Features
-- **Ping** — Test host reachability with RTT stats and bar chart
-- **Traceroute** — Live hop-by-hop path tracing with RTT coloring
-- **Subnet Sweep** — Ping-sweep a range to discover live hosts
-- **Subnet Calculator** — Full CIDR breakdown with binary view
-- **Latency Guide** — Reference tiers and per-use-case thresholds
+<div align="center">
+
+**Fast, clean, and lightweight network diagnostics for Windows.**
+*No command prompt. No dependencies. No bloat.*
+
+[Download Latest Release](../../releases/latest) · [Report a Bug](../../issues) · [Request a Feature](../../issues)
+
+</div>
 
 ---
 
-## Setup (First Time)
+## What is Hana?
 
-### Prerequisites
-- [Node.js](https://nodejs.org/) v18 or later
-- npm (comes with Node.js)
+Hana is a free desktop network utility built for IT professionals, network
+administrators, and technically curious users who need fast, reliable network
+diagnostics without the overhead of heavy enterprise tools.
 
-### Install & Run
+The name Hana (ханa) means "flower" in Bosnian — something small, purposeful,
+and built with care. That philosophy carries through to every part of the app:
+lightweight installer, clean interface, instant results.
+
+---
+
+## Modules
+
+### ◎ Ping
+Test whether a host is reachable and measure round-trip time with precision.
+
+- **Fixed mode** — send 1 to 16 packets and get a clean min/avg/max summary
+- **Continuous mode** — run an infinite ping with a live scrolling RTT graph,
+  real-time packet loss counter, and color-coded latency classification
+- Export results as `.txt` or `.csv`
+
+### ⊛ Multi-Ping
+Monitor up to 5 hosts simultaneously on a single screen.
+
+- Each host gets its own live status card — green when responding, red when down
+- Sparkline bar chart shows the last 20 ping results per host at a glance
+- Global status bar shows total up vs down count instantly
+- Designed for watching devices come back online after a reboot or failover
+  without switching windows
+
+### ⤵ Traceroute
+Trace the exact network path your traffic takes to reach any destination.
+
+- Live hop-by-hop streaming — results appear as they arrive
+- Color-coded RTT per hop — green through red shows latency at a glance
+- Identifies unresponsive hops without stalling the trace
+- Export full hop table as `.txt` or `.csv`
+
+### ⊞ Subnet Sweep
+Discover every host on a subnet without touching the command line.
+
+- Enter the first three octets of your subnet and a scan range
+- Parallel ping sweep with live progress bar
+- Two-column results table — green for live hosts, gray for no response
+- Sorted numerically so results are immediately readable
+- Export full results as `.txt` or `.csv`
+
+### ⊟ Subnet Calculator
+Instant CIDR subnet math — no mental arithmetic required.
+
+- Enter any IP address and drag the prefix slider
+- Instantly calculates network address, broadcast address, first and last
+  usable host, subnet mask, wildcard mask, total hosts, IP class, and
+  whether the address is private or public
+- Binary representation with network bits highlighted
+- Updates in real time as you adjust the prefix
+
+### ⊕ IP Info & WhoIs
+Three tools in one tab — no browser required.
+
+- **Your Public IP** — auto-detected on load with ISP, location, ASN,
+  timezone, and coordinate details
+- **IP Lookup** — enter any IP address to see its full geolocation
+  and network information
+- **WhoIs** — look up registration records for any domain or IP,
+  including registrar, creation and expiry dates, and name servers
+- All three sections export to `.txt` and `.csv`
+
+### ≋ Latency Guide
+A built-in reference for understanding what your ping results actually mean.
+
+- Latency tier table from loopback (< 1ms) through satellite (> 700ms)
+- Per-application thresholds for gaming, VoIP, video conferencing,
+  web browsing, database queries, and CDN delivery
+- Live classifier — type any ms value to instantly see its rating
+
+---
+
+## Why Hana instead of the command line?
+
+| Task | Command line | Hana |
+|---|---|---|
+| Continuous ping with graph | `ping -t 8.8.8.8` + mental math | One click, live graph |
+| Monitor multiple hosts | Multiple windows | Multi-Ping, one screen |
+| Subnet sweep | Script or third-party tool | Built in, visual results |
+| Subnet calculation | RFC lookup + manual math | Instant, with binary view |
+| Traceroute | `tracert -d hostname` | Streaming, color-coded |
+| Public IP lookup | Open browser, google it | Built in, instant |
+| WhoIs lookup | Command line tool or website | Built in, exportable |
+| Export results | Copy/paste from terminal | One click `.txt` or `.csv` |
+
+---
+
+## Installation
+
+1. Go to the [Releases page](../../releases/latest)
+2. Download `Hana - Network Utility Setup 1.3.0.exe`
+3. Run the installer — no admin rights required for per-user install
+4. Launch Hana from the Start Menu
+
+> **Note:** Windows SmartScreen may show a warning on first launch.
+> Click **More info → Run anyway**. This is expected for unsigned applications.
+> Hana makes no external connections except when you explicitly use the
+> IP Info module. No telemetry, no background processes, no data collection.
+
+---
+
+## Privacy & Security
+
+Hana collects **no data** of any kind. It makes outbound network requests
+only when you explicitly trigger them:
+
+- Ping and traceroute packets to hosts you specify
+- IP geolocation queries via [ip-api.com](http://ip-api.com) (IP Info module)
+- WhoIs queries via public RDAP and WhoIs services
+- Public IP detection via [ipify.org](https://api.ipify.org)
+
+See [PRIVACY.md](PRIVACY.md) for the full privacy policy and
+[SECURITY.md](SECURITY.md) for how to report vulnerabilities.
+
+---
+
+## Acceptable Use
+
+Hana is provided for legitimate network administration, troubleshooting,
+and educational use only. You must have permission to scan any network
+you test. See [TERMS.md](TERMS.md) for the full terms of use.
+
+---
+
+## Building from Source
 
 ```bash
-# 1. Navigate into the project folder
-cd netpulse
-
-# 2. Install dependencies
+# Prerequisites: Node.js v18 or later
+git clone https://github.com/Proxy-IT/hana-network-utility.git
+cd hana-network-utility
 npm install
-
-# 3. Start the app (opens Electron window)
-npm start
-```
-
-The first `npm install` takes ~1–2 minutes. After that, `npm start` launches in seconds.
-
----
-
-## Build a Distributable
-
-```bash
-# Build for current platform (Mac → .dmg, Windows → .exe installer)
-npm run build
-```
-
-Output goes to the `dist/` folder.
-
----
-
-## Project Structure
-
-```
-netpulse/
-├── electron/
-│   ├── main.js        ← Electron main process (IPC, system calls)
-│   └── preload.js     ← Secure bridge between Electron and React
-├── src/
-│   ├── App.js         ← Root component, tab routing
-│   ├── index.js       ← React entry point
-│   ├── index.css      ← Design tokens and global styles
-│   ├── components/
-│   │   ├── Sidebar.js
-│   │   ├── PingTool.js
-│   │   ├── Traceroute.js
-│   │   ├── SubnetSweep.js
-│   │   ├── SubnetCalc.js
-│   │   └── LatencyGuide.js
-│   └── utils/
-│       ├── subnet.js   ← Pure subnet math (no system calls)
-│       ├── latency.js  ← Latency tier data and classifier
-│       └── parsers.js  ← Ping/traceroute output parsers
-├── public/
-│   └── index.html
-└── package.json
+npm start            # run in development mode
+npm run build        # produce installer in dist/
 ```
 
 ---
 
-## Notes
-
-- **Traceroute on Mac** requires `traceroute` (pre-installed on macOS).
-- **Traceroute on Windows** uses `tracert` (built-in).
-- **Subnet Sweep** uses parallel pings — sweeping large ranges (e.g. /16) will be slow.
-- **iOS**: This app targets Mac/Windows desktop. iOS sandboxing prevents raw ICMP/system calls.
-
----
-
-## Extending the App
-
-Each tool is a self-contained React component in `src/components/`. To add a new tool:
-1. Create `src/components/MyTool.js`
-2. Add it to the `VIEWS` map in `App.js`
-3. Add a nav entry to the `TABS` array in `Sidebar.js`
-4. If it needs system access, add an IPC handler in `electron/main.js` and expose it in `preload.js`
-=======
-# hana-network-utility
-Lightweight Windows network diagnostic tool — ping, traceroute, subnet sweep, subnet calculator and latency reference in one clean interface
->>>>>>> 3fa6308515fed5a17522d7f201d39cc392e83eb6
 ## Version History
 
 | Version | Highlights |
 |---|---|
-| v1.3.0 | Multi-Ping monitor for up to 5 hosts, IP Info & WhoIs module with export |
+| v1.3.0 | Multi-Ping monitor for up to 5 hosts, IP Info & WhoIs module with full export |
 | v1.2.0 | Rebranded to Hana, CSV/TXT export on all tools, redesigned subnet sweep results |
 | v1.1.0 | Continuous ping with live RTT graph, in-app instructions, Windows path fixes |
 | v1.0.0 | Initial release |
+
+---
+
+## License
+
+This project is licensed under the **GNU General Public License v3.0**.
+See [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+<sub>Built with care. Named with meaning. 🌸</sub>
+</div>
