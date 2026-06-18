@@ -25,6 +25,12 @@ The name Hana (ханa) means "flower" in Bosnian — something small, purposefu
 and built with care. That philosophy carries through to every part of the app:
 lightweight installer, clean interface, instant results.
 
+Designed to assist network administrators with day-to-day troubleshooting and security investigations, 
+this tool helps identify downed devices and investigate unknown IP addresses interacting with your 
+network perimeter. Released under the GNU License, the entire project is open source, with 
+all source code publicly available.
+ 
+
 ---
 
 ## Modules
