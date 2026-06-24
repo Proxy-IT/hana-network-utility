@@ -1,0 +1,115 @@
+name: Build Hana - Network Utility
+
+on:
+  push:
+    tags:
+      - 'v*'        # Triggers on version tags like v1.3.0, v1.4.0 etc
+  workflow_dispatch: # Also allows manual trigger from GitHub Actions tab
+
+jobs:
+
+  # ── Build Windows installer ─────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/*.exe
+          retention-days: 5
+
+  # ── Build Mac installer ─────────────────────────────────────────────────────
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mac installer
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Mac artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-installer
+          path: dist/*.dmg
+          retention-days: 5
+
+  # ── Create GitHub Release with both installers ──────────────────────────────
+  release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/windows
+
+      - name: Download Mac artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-installer
+          path: dist/mac
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Hana - Network Utility ${{ github.ref_name }}
+          body: |
+            ## Hana - Network Utility ${{ github.ref_name }}
+
+            ### Downloads
+            - **Windows:** Download the `.exe` file below and run the installer
+            - **Mac:** Download the `.dmg` file below, open it, and drag Hana to Applications
+
+            > **Windows note:** SmartScreen may show a warning on first launch.
+            > Click **More info → Run anyway**. This is normal for unsigned apps.
+
+            > **Mac note:** If macOS blocks the app, go to **System Settings → Privacy & Security**
+            > and click **Open Anyway**.
+
+            ---
+            No telemetry. No ads. No data collection.
+            See [TERMS.md](TERMS.md) for acceptable use policy.
+          files: |
+            dist/windows/*.exe
+            dist/mac/*.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
