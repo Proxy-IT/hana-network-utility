@@ -52,6 +52,13 @@ replies from routers were incorrectly treated as successful responses.
 - Fixed Electron binary install failure under Node.js v24 — project now
   requires Node.js v18 LTS
 
+### Known Issues
+
+- **Mac — Gatekeeper warning:** macOS will show a "damaged" or "unidentified
+  developer" warning on first launch because Hana is not yet notarized with
+  an Apple Developer certificate. See the README for step-by-step instructions
+  to bypass this. Apple Developer notarization is planned for a future release.
+
 ### Technical Changes
 
 - Upgraded Electron from v27 to v33 for Node.js v18 compatibility

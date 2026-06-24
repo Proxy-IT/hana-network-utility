@@ -1,4 +1,4 @@
-# Hana — Network Utility
+# 🌸 Hana — Network Utility
 
 > ⚠️ **Legal Notice:** Hana is intended for use only on networks you own or have explicit
 > permission to test. Unauthorized network scanning may be illegal in your jurisdiction.
@@ -24,12 +24,6 @@ diagnostics without the overhead of heavy enterprise tools.
 The name Hana (ханa) means "flower" in Bosnian — something small, purposeful,
 and built with care. That philosophy carries through to every part of the app:
 lightweight installer, clean interface, instant results.
-
-Designed to assist network administrators with day-to-day troubleshooting and security investigations, 
-this tool helps identify downed devices and investigate unknown IP addresses interacting with your 
-network perimeter. Released under the GNU License, the entire project is open source, with 
-all source code publicly available.
- 
 
 ---
 
@@ -117,15 +111,61 @@ A built-in reference for understanding what your ping results actually mean.
 
 ## Installation
 
+### Windows
+
 1. Go to the [Releases page](../../releases/latest)
 2. Download `Hana - Network Utility Setup 1.5.0.exe`
-3. Run the installer — no admin rights required for per-user install
+3. Run the installer and follow the prompts
 4. Launch Hana from the Start Menu
 
-> **Note:** Windows SmartScreen may show a warning on first launch.
-> Click **More info → Run anyway**. This is expected for unsigned applications.
-> Hana makes no external connections except when you explicitly use the
-> IP Info module. No telemetry, no background processes, no data collection.
+> **Windows SmartScreen warning:** If you see "Windows protected your PC",
+> click **More info** then **Run anyway**. This appears because Hana is not
+> yet code signed. It is completely safe to install.
+
+---
+
+### Mac
+
+**Step 1 — Download the correct version for your Mac**
+
+Click the Apple menu → **About This Mac** to check your chip:
+- **Apple M1 / M2 / M3 / M4** → download the file ending in `arm64.dmg`
+- **Intel** → download the standard `.dmg` file
+
+**Step 2 — Open the DMG**
+
+Double-click the downloaded `.dmg` file. A window appears showing the
+Hana icon and an Applications folder shortcut.
+
+**Step 3 — Drag to Applications**
+
+Drag the Hana icon onto the Applications folder.
+
+**Step 4 — First launch (important)**
+
+Because Hana is not yet notarized with Apple, macOS will block it on
+first launch. Here is how to open it:
+
+**Method A — Right-click (easiest):**
+1. Open **Finder → Applications**
+2. Find **Hana - Network Utility**
+3. **Right-click** it → click **Open**
+4. Click **Open** in the dialog that appears
+5. Hana will launch and remember your choice permanently
+
+**Method B — Privacy & Security settings:**
+1. Try to open Hana normally — macOS will show a warning
+2. Go to **Apple menu → System Settings → Privacy & Security**
+3. Scroll down to find the message about Hana being blocked
+4. Click **Open Anyway**
+5. Enter your Mac password if prompted
+
+> **Why does this happen?** macOS Gatekeeper requires apps to be notarized
+> with an Apple Developer certificate. Hana is a free open source tool and
+> notarization is being added in a future release. The app is completely
+> safe — you can inspect the full source code on this page.
+
+---
 
 ---
 
