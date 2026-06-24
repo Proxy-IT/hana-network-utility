@@ -3,8 +3,11 @@ name: Build Hana - Network Utility
 on:
   push:
     tags:
-      - 'v*'        # Triggers on version tags like v1.3.0, v1.4.0 etc
-  workflow_dispatch: # Also allows manual trigger from GitHub Actions tab
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
 
@@ -36,8 +39,8 @@ jobs:
           path: dist/*.exe
           retention-days: 5
 
-  # ── Build Mac installer ─────────────────────────────────────────────────────
-  build-mac:
+  # ── Build Mac arm64 (Apple Silicon) ────────────────────────────────────────
+  build-mac-arm64:
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -52,23 +55,53 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Mac installer
-        run: npm run build
+      - name: Build Mac arm64 installer
+        run: npx electron-builder --mac --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Mac artifact
+      - name: Upload Mac arm64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mac-installer
+          name: mac-installer-arm64
+          path: dist/*arm64*.dmg
+          retention-days: 5
+
+  # ── Build Mac x64 (Intel) ───────────────────────────────────────────────────
+  build-mac-x64:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mac x64 installer
+        run: npx electron-builder --mac --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Mac x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-installer-x64
           path: dist/*.dmg
           retention-days: 5
 
-  # ── Create GitHub Release with both installers ──────────────────────────────
+  # ── Create GitHub Release with all installers ───────────────────────────────
   release:
-    needs: [build-windows, build-mac]
+    needs: [build-windows, build-mac-arm64, build-mac-x64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -80,11 +113,17 @@ jobs:
           name: windows-installer
           path: dist/windows
 
-      - name: Download Mac artifact
+      - name: Download Mac arm64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: mac-installer
-          path: dist/mac
+          name: mac-installer-arm64
+          path: dist/mac-arm64
+
+      - name: Download Mac x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-installer-x64
+          path: dist/mac-x64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -94,21 +133,28 @@ jobs:
             ## Hana - Network Utility ${{ github.ref_name }}
 
             ### Downloads
-            - **Windows:** Download the `.exe` file below and run the installer
-            - **Mac:** Download the `.dmg` file below, open it, and drag Hana to Applications
 
-            > **Windows note:** SmartScreen may show a warning on first launch.
-            > Click **More info → Run anyway**. This is normal for unsigned apps.
+            **Windows**
+            - Download the `.exe` file and run the installer
+            - SmartScreen may show a warning — click **More info → Run anyway**
 
-            > **Mac note:** If macOS blocks the app, go to **System Settings → Privacy & Security**
-            > and click **Open Anyway**.
+            **Mac — Apple Silicon (M1/M2/M3/M4)**
+            - Download the `arm64.dmg` file
+            - Open it and drag Hana to Applications
+            - Right-click the app → Open on first launch to bypass Gatekeeper
+
+            **Mac — Intel**
+            - Download the standard `.dmg` file
+            - Open it and drag Hana to Applications
+            - Right-click the app → Open on first launch to bypass Gatekeeper
 
             ---
             No telemetry. No ads. No data collection.
-            See [TERMS.md](TERMS.md) for acceptable use policy.
+            See [CHANGELOG.md](CHANGELOG.md) for full patch notes.
           files: |
             dist/windows/*.exe
-            dist/mac/*.dmg
+            dist/mac-arm64/*.dmg
+            dist/mac-x64/*.dmg
           draft: false
           prerelease: false
         env:
