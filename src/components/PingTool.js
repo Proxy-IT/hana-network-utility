@@ -45,7 +45,7 @@ export default function PingTool({ state, setState }) {
     }
   }, [state.liveStats]);
 
-  // Clean up on unmount
+  // Clean up on unmount — stop processes AND mark as not running
   useEffect(() => {
     return () => {
       if (window.electronAPI) {
@@ -54,8 +54,10 @@ export default function PingTool({ state, setState }) {
         window.electronAPI.stopContinuousPing?.();
         window.electronAPI.removeContinuousPingListeners?.();
       }
+      // Reset running state so UI is accurate when returning to this tab
+      setState(prev => ({ ...prev, running: false }));
     };
-  }, []);
+  }, [setState]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function set(patch) { setState(prev => ({ ...prev, ...patch })); }

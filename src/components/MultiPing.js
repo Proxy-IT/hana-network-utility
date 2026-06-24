@@ -64,10 +64,22 @@ export default function MultiPing({ state, setState }) {
   function setRunning(fn) { setState(prev => ({ ...prev, running: typeof fn === 'function' ? fn(prev.running) : fn })); }
   function setResults(fn) { setState(prev => ({ ...prev, results: typeof fn === 'function' ? fn(prev.results) : fn })); }
 
-  // Clean up on unmount
+  // Clean up on unmount — stop all processes AND reset running state
   useEffect(() => {
-    return () => stopAll(true);
-  }, []);
+    return () => {
+      // Stop all ping processes
+      Object.keys(demoIntervals).forEach(id => {
+        clearInterval(demoIntervals[id]);
+        delete demoIntervals[id];
+      });
+      if (window.electronAPI) {
+        window.electronAPI.stopMultiPing({ slotId: 'all' });
+        window.electronAPI.removeMultiPingListeners();
+      }
+      // Reset running state so UI is honest when returning
+      setState(prev => ({ ...prev, running: false }));
+    };
+  }, [setState]);
 
   function addSlot() {
     if (slots.length >= 5) return;
