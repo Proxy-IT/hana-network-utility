@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 const os = require('os');
@@ -62,17 +62,76 @@ function execShell(cmd, opts, cb) {
   }, cb);
 }
 
-// ── PING (one-shot) ───────────────────────────────────────────────────────────
-ipcMain.handle('ping', async (event, { host, count }) => {
-  return new Promise((resolve) => {
-    const cmd = isWin
-      ? `"${sysCmd('ping.exe')}" -n ${count} ${host}`
-      : `ping -c ${count} ${host}`;
-    execShell(cmd, { timeout: 30000 }, (err, stdout, stderr) => {
-      if (err && !stdout) resolve({ success: false, output: stderr || err.message });
-      else resolve({ success: true, output: stdout });
+// ── PING (streaming, line by line) ───────────────────────────────────────────
+ipcMain.on('ping-start', (event, { host, count }) => {
+  const cmd  = isWin ? sysCmd('ping.exe') : 'ping';
+  const args = isWin ? ['-n', String(count), host] : ['-c', String(count), host];
+  const proc = spawn(cmd, args, { env: { ...process.env } });
+  let fullOutput = '';
+
+  proc.stdout.on('data', (data) => {
+    const text = data.toString();
+    fullOutput += text;
+    // Print raw output directly to the terminal running npm start
+    process.stdout.write('=== PING RAW ===\n' + JSON.stringify(text) + '\n');
+
+    text.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      // Detect unreachable — Windows returns "Reply from X.X.X.X: Destination host unreachable."
+      // The reply comes FROM the router, not the target — treat as failure
+      const unreachable = /unreachable/i.test(trimmed);
+
+      // Extract RTT — only valid if NOT unreachable
+      let rtt = null;
+      if (!unreachable) {
+        const winMatch  = trimmed.match(/time[<=]([\d.]+)ms/i);
+        const unixMatch = trimmed.match(/time[<=]([\d.]+)\s*ms/i);
+        if (winMatch)       rtt = parseFloat(winMatch[1]);
+        else if (unixMatch) rtt = parseFloat(unixMatch[1]);
+      }
+
+      const timeout = /request timed out|no answer/i.test(trimmed);
+
+      // Only send lines that are actual ping results
+      const isResult = rtt !== null || timeout || unreachable ||
+                       /bytes from|reply from/i.test(trimmed);
+
+      if (isResult) {
+        event.sender.send('ping-line', {
+          line: trimmed,
+          rtt,
+          timeout: timeout || unreachable,
+          unreachable,
+          isErr: false,
+        });
+      } else if (trimmed && !/^pinging|^ping statistics|^---/i.test(trimmed)) {
+        // Send summary/other lines (packet stats etc)
+        event.sender.send('ping-line', { line: trimmed, rtt: null, timeout: false, unreachable: false, isErr: false });
+      }
     });
   });
+
+  proc.stderr.on('data', (data) => {
+    event.sender.send('ping-line', { line: data.toString().trim(), rtt: null, timeout: false, unreachable: false, isErr: true });
+  });
+
+  proc.on('close', (code) => {
+    event.sender.send('ping-done', { output: fullOutput, code });
+  });
+
+  continuousProcs.set('ping-' + event.sender.id, proc);
+});
+
+ipcMain.on('ping-stop', (event) => {
+  const key  = 'ping-' + event.sender.id;
+  const proc = continuousProcs.get(key);
+  if (proc) {
+    if (isWin) exec(`taskkill /pid ${proc.pid} /T /F`, { shell: 'cmd.exe' });
+    else proc.kill();
+    continuousProcs.delete(key);
+  }
 });
 
 // ── CONTINUOUS PING (single host) ─────────────────────────────────────────────
@@ -92,9 +151,15 @@ ipcMain.on('ping-continuous-start', (event, { host }) => {
       const unixMatch = line.match(/time[<=]([\d.]+)\s*ms/i);
       if (winMatch)       rtt = parseFloat(winMatch[1]);
       else if (unixMatch) rtt = parseFloat(unixMatch[1]);
-      const timeout = /request timed out|no answer/i.test(line);
-      if (rtt !== null || timeout) {
-        event.sender.send('ping-continuous-result', { rtt, timeout, line });
+      const timeout     = /request timed out|no answer/i.test(line);
+      const unreachable = /destination host unreachable|host unreachable|unreachable/i.test(line);
+      if (rtt !== null || timeout || unreachable) {
+        event.sender.send('ping-continuous-result', {
+          rtt: unreachable ? null : rtt,
+          timeout: timeout || unreachable,
+          unreachable,
+          line,
+        });
       }
     });
   });
@@ -144,9 +209,16 @@ ipcMain.on('multi-ping-start', (event, { slotId, host }) => {
       const unixMatch = line.match(/time[<=]([\d.]+)\s*ms/i);
       if (winMatch)       rtt = parseFloat(winMatch[1]);
       else if (unixMatch) rtt = parseFloat(unixMatch[1]);
-      const timeout = /request timed out|no answer/i.test(line);
-      if (rtt !== null || timeout) {
-        event.sender.send('multi-ping-result', { slotId, rtt, timeout });
+      const timeout     = /request timed out|no answer/i.test(line);
+      const unreachable = /destination host unreachable|host unreachable|unreachable/i.test(line);
+      // If unreachable, ignore any rtt — it came from the router, not the target
+      if (rtt !== null || timeout || unreachable) {
+        event.sender.send('multi-ping-result', {
+          slotId,
+          rtt: unreachable ? null : rtt,
+          timeout: timeout || unreachable,
+          unreachable,
+        });
       }
     });
   });
@@ -235,6 +307,11 @@ ipcMain.on('subnet-sweep-start', (event, { baseIp, start, end }) => {
     });
   }
   for (let i = 0; i < BATCH && nextIdx <= end; i++) pingOne(nextIdx++);
+});
+
+// ── OPEN EXTERNAL LINKS ──────────────────────────────────────────────────────
+ipcMain.on('open-external', (event, url) => {
+  shell.openExternal(url);
 });
 
 // ── SYSTEM INFO ───────────────────────────────────────────────────────────────

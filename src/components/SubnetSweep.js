@@ -1,9 +1,20 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { exportSweepTxt, exportSweepCsv } from '../utils/export';
 import Instructions from './Instructions';
 import ExportBar from './ExportBar';
 
 const isBrowser = !window.electronAPI;
+
+// ── Default state — exported so App.js can initialise it ─────────────────────
+export const defaultSweepState = {
+  baseIp:   '192.168.1',
+  start:    '1',
+  end:      '50',
+  running:  false,
+  results:  [],
+  done:     false,
+  progress: 0,
+};
 
 const INSTRUCTIONS = {
   title: 'How to use Subnet Sweep',
@@ -23,14 +34,17 @@ function generateFakeSweep(s, e) {
   return alive;
 }
 
-export default function SubnetSweep() {
-  const [baseIp, setBaseIp]     = useState('192.168.1');
-  const [start, setStart]       = useState('1');
-  const [end, setEnd]           = useState('50');
-  const [running, setRunning]   = useState(false);
-  const [results, setResults]   = useState([]);  // { ip, alive }
-  const [done, setDone]         = useState(false);
-  const [progress, setProgress] = useState(0);
+export default function SubnetSweep({ state, setState }) {
+  const { baseIp, start, end, running, results, done, progress } = state;
+
+  function set(patch) { setState(prev => ({ ...prev, ...patch })); }
+  function setBaseIp(v)   { setState(prev => ({ ...prev, baseIp:   typeof v === 'function' ? v(prev.baseIp)   : v })); }
+  function setStart(v)    { setState(prev => ({ ...prev, start:    typeof v === 'function' ? v(prev.start)    : v })); }
+  function setEnd(v)      { setState(prev => ({ ...prev, end:      typeof v === 'function' ? v(prev.end)      : v })); }
+  function setRunning(v)  { setState(prev => ({ ...prev, running:  typeof v === 'function' ? v(prev.running)  : v })); }
+  function setResults(v)  { setState(prev => ({ ...prev, results:  typeof v === 'function' ? v(prev.results)  : v })); }
+  function setDone(v)     { setState(prev => ({ ...prev, done:     typeof v === 'function' ? v(prev.done)     : v })); }
+  function setProgress(v) { setState(prev => ({ ...prev, progress: typeof v === 'function' ? v(prev.progress) : v })); }
 
   function startSweep() {
     const s = parseInt(start, 10);

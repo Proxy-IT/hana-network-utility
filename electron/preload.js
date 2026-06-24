@@ -1,8 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // One-shot ping
-  ping: (opts) => ipcRenderer.invoke('ping', opts),
+  // Streaming ping (fixed count, results arrive line by line)
+  startPing:          (opts) => ipcRenderer.send('ping-start', opts),
+  stopPing:           ()     => ipcRenderer.send('ping-stop'),
+  onPingLine:         (cb)   => ipcRenderer.on('ping-line', (_, d) => cb(d)),
+  onPingDone:         (cb)   => ipcRenderer.on('ping-done', (_, d) => cb(d)),
+  removePingListeners: ()    => {
+    ipcRenderer.removeAllListeners('ping-line');
+    ipcRenderer.removeAllListeners('ping-done');
+  },
 
   // Continuous ping (single host)
   startContinuousPing:           (opts) => ipcRenderer.send('ping-continuous-start', opts),
@@ -45,4 +52,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // System info
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+
+  // Open external URL in default browser
+  openExternal: (url) => ipcRenderer.send('open-external', url),
 });

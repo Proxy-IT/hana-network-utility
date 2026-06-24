@@ -1,22 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
-import PingTool from './components/PingTool';
-import MultiPing from './components/MultiPing';
+import PingTool,  { defaultPingState }      from './components/PingTool';
+import MultiPing, { defaultMultiPingState } from './components/MultiPing';
 import Traceroute from './components/Traceroute';
-import SubnetSweep from './components/SubnetSweep';
+import SubnetSweep, { defaultSweepState } from './components/SubnetSweep';
 import SubnetCalc from './components/SubnetCalc';
 import LatencyGuide from './components/LatencyGuide';
 import IpInfo from './components/IpInfo';
-
-const VIEWS = {
-  ping:      PingTool,
-  multiping: MultiPing,
-  tracert:   Traceroute,
-  sweep:     SubnetSweep,
-  subnet:    SubnetCalc,
-  latency:   LatencyGuide,
-  ipinfo:    IpInfo,
-};
+import About from './components/About';
+import Disclaimer, { hasAccepted } from './components/Disclaimer';
 
 const style = document.createElement('style');
 style.textContent = `
@@ -33,8 +25,14 @@ style.textContent = `
 document.head.appendChild(style);
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('ping');
-  const [sysInfo, setSysInfo]     = useState(null);
+  const [activeTab,  setActiveTab]  = useState('ping');
+  const [sysInfo,    setSysInfo]    = useState(null);
+  const [accepted,   setAccepted]   = useState(hasAccepted());
+
+  // Persistent state for stateful modules
+  const [pingState,      setPingState]      = useState(defaultPingState);
+  const [multiPingState, setMultiPingState] = useState(defaultMultiPingState);
+  const [sweepState,     setSweepState]     = useState(defaultSweepState);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -44,17 +42,32 @@ export default function App() {
     }
   }, []);
 
-  const ActiveView = VIEWS[activeTab];
+  function renderView() {
+    switch (activeTab) {
+      case 'ping':      return <PingTool  state={pingState}      setState={setPingState} />;
+      case 'multiping': return <MultiPing state={multiPingState} setState={setMultiPingState} />;
+      case 'tracert':   return <Traceroute />;
+      case 'sweep':     return <SubnetSweep state={sweepState} setState={setSweepState} />;
+      case 'subnet':    return <SubnetCalc />;
+      case 'ipinfo':    return <IpInfo />;
+      case 'latency':   return <LatencyGuide />;
+      case 'about':     return <About />;
+      default:          return <PingTool state={pingState} setState={setPingState} />;
+    }
+  }
 
   return (
-    <div style={layout.app}>
-      <Sidebar active={activeTab} onSelect={setActiveTab} sysInfo={sysInfo} />
-      <main style={layout.main}>
-        <div style={layout.content}>
-          <ActiveView />
-        </div>
-      </main>
-    </div>
+    <>
+      {!accepted && <Disclaimer onAccept={() => setAccepted(true)} />}
+      <div style={{ ...layout.app, filter: accepted ? 'none' : 'blur(4px)', pointerEvents: accepted ? 'auto' : 'none' }}>
+        <Sidebar active={activeTab} onSelect={setActiveTab} sysInfo={sysInfo} />
+        <main style={layout.main}>
+          <div style={layout.content}>
+            {renderView()}
+          </div>
+        </main>
+      </div>
+    </>
   );
 }
 

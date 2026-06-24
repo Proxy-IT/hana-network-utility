@@ -3,6 +3,16 @@ import { classifyLatency } from '../utils/latency';
 import Instructions from './Instructions';
 
 const isBrowser = !window.electronAPI;
+
+// ── Default state — exported so App.js can initialise it ─────────────────────
+export const defaultMultiPingState = {
+  slots: [
+    { id: 1, host: '' },
+    { id: 2, host: '' },
+  ],
+  running: false,
+  results: {},
+};
 const MAX_HISTORY = 20; // sparkline samples per host
 
 const INSTRUCTIONS = {
@@ -43,15 +53,16 @@ function makeDemoResult(host) {
   };
 }
 
-export default function MultiPing() {
-  const [slots, setSlots] = useState([
-    { id: 1, host: '', },
-    { id: 2, host: '', },
-  ]);
-  const [running, setRunning]   = useState(false);
-  const [results, setResults]   = useState({}); // keyed by slot id
-  const nextId = useRef(3);
+export default function MultiPing({ state, setState }) {
+  const slots   = state.slots;
+  const running = state.running;
+  const results = state.results;
+  const nextId  = useRef(Math.max(...state.slots.map(s => s.id), 2) + 1);
   const procsRef = useRef({});
+
+  function setSlots(fn)   { setState(prev => ({ ...prev, slots:   typeof fn === 'function' ? fn(prev.slots)   : fn })); }
+  function setRunning(fn) { setState(prev => ({ ...prev, running: typeof fn === 'function' ? fn(prev.running) : fn })); }
+  function setResults(fn) { setState(prev => ({ ...prev, results: typeof fn === 'function' ? fn(prev.results) : fn })); }
 
   // Clean up on unmount
   useEffect(() => {
@@ -138,8 +149,8 @@ export default function MultiPing() {
 
     // Wire up shared result listener — results include slotId to route correctly
     window.electronAPI.removeMultiPingListeners();
-    window.electronAPI.onMultiPingResult(({ slotId, rtt, timeout }) => {
-      addResult(slotId, { rtt: rtt ?? null, timeout: !!timeout });
+    window.electronAPI.onMultiPingResult(({ slotId, rtt, timeout, unreachable }) => {
+      addResult(slotId, { rtt: rtt ?? null, timeout: !!timeout || !!unreachable });
     });
 
     activeSlots.forEach(s => startHost(s.id, s.host));
