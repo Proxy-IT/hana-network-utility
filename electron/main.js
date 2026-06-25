@@ -314,6 +314,150 @@ ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
+// ── DNS LOOKUP ───────────────────────────────────────────────────────────────
+ipcMain.handle('dns-lookup', async (event, { host, type, server }) => {
+  return new Promise((resolve) => {
+    const dns = require('dns');
+
+    // Use custom DNS server if provided
+    if (server && server !== '8.8.8.8' && server !== '1.1.1.1') {
+      dns.setServers([server]);
+    } else if (server) {
+      dns.setServers([server]);
+    }
+
+    const results = [];
+    const errors  = [];
+    const types   = type === 'ALL' ? ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'PTR'] : [type];
+    let pending   = types.length;
+
+    function done() {
+      pending--;
+      if (pending === 0) {
+        resolve({ success: true, results, errors });
+      }
+    }
+
+    // Detect if input is an IP for reverse lookup
+    const isIp = /^[\d.]+$/.test(host) || /^[0-9a-fA-F:]+$/.test(host);
+
+    types.forEach(t => {
+      if (t === 'PTR' && !isIp) { pending--; if (pending === 0) resolve({ success: true, results, errors }); return; }
+      if (t === 'A' && isIp)    { pending--; if (pending === 0) resolve({ success: true, results, errors }); return; }
+
+      try {
+        if (t === 'A') {
+          dns.resolve4(host, { ttl: true }, (err, addrs) => {
+            if (!err && addrs) addrs.forEach(a => results.push({ type: 'A', value: a.address, ttl: a.ttl }));
+            else if (err) errors.push({ type: 'A', message: err.message });
+            done();
+          });
+        } else if (t === 'AAAA') {
+          dns.resolve6(host, { ttl: true }, (err, addrs) => {
+            if (!err && addrs) addrs.forEach(a => results.push({ type: 'AAAA', value: a.address, ttl: a.ttl }));
+            else if (err) errors.push({ type: 'AAAA', message: err.message });
+            done();
+          });
+        } else if (t === 'CNAME') {
+          dns.resolveCname(host, (err, addrs) => {
+            if (!err && addrs) addrs.forEach(a => results.push({ type: 'CNAME', value: a, ttl: null }));
+            else if (err) errors.push({ type: 'CNAME', message: err.message });
+            done();
+          });
+        } else if (t === 'MX') {
+          dns.resolveMx(host, (err, addrs) => {
+            if (!err && addrs) addrs.forEach(a => results.push({ type: 'MX', value: a.exchange, priority: a.priority, ttl: null }));
+            else if (err) errors.push({ type: 'MX', message: err.message });
+            done();
+          });
+        } else if (t === 'TXT') {
+          dns.resolveTxt(host, (err, addrs) => {
+            if (!err && addrs) addrs.forEach(a => results.push({ type: 'TXT', value: a.join(' '), ttl: null }));
+            else if (err) errors.push({ type: 'TXT', message: err.message });
+            done();
+          });
+        } else if (t === 'NS') {
+          dns.resolveNs(host, (err, addrs) => {
+            if (!err && addrs) addrs.forEach(a => results.push({ type: 'NS', value: a, ttl: null }));
+            else if (err) errors.push({ type: 'NS', message: err.message });
+            done();
+          });
+        } else if (t === 'PTR') {
+          dns.reverse(host, (err, addrs) => {
+            if (!err && addrs) addrs.forEach(a => results.push({ type: 'PTR', value: a, ttl: null }));
+            else if (err) errors.push({ type: 'PTR', message: err.message });
+            done();
+          });
+        } else {
+          done();
+        }
+      } catch (e) {
+        errors.push({ type: t, message: e.message });
+        done();
+      }
+    });
+  });
+});
+
+// ── PORT SCANNER ──────────────────────────────────────────────────────────────
+ipcMain.on('portscan-start', (event, { host, ports }) => {
+  const net      = require('net');
+  const total    = ports.length;
+  let completed  = 0;
+  const TIMEOUT  = 2000;
+  const BATCH    = 20; // max concurrent connections
+  let nextIdx    = 0;
+
+  function scanPort(port) {
+    const socket = new net.Socket();
+    let status   = 'filtered';
+
+    socket.setTimeout(TIMEOUT);
+
+    socket.on('connect', () => {
+      status = 'open';
+      socket.destroy();
+    });
+
+    socket.on('timeout', () => {
+      status = 'filtered';
+      socket.destroy();
+    });
+
+    socket.on('error', (err) => {
+      if (err.code === 'ECONNREFUSED') {
+        status = 'closed';
+      } else {
+        status = 'filtered';
+      }
+      socket.destroy();
+    });
+
+    socket.on('close', () => {
+      event.sender.send('portscan-result', { port, status });
+      completed++;
+
+      // Dispatch next port in queue
+      if (nextIdx < ports.length) {
+        scanPort(ports[nextIdx++]);
+      }
+
+      if (completed === total) {
+        event.sender.send('portscan-done', {});
+      }
+    });
+
+    socket.connect(port, host);
+  }
+
+  // Kick off initial batch
+  const initialBatch = Math.min(BATCH, ports.length);
+  nextIdx = initialBatch;
+  for (let i = 0; i < initialBatch; i++) {
+    scanPort(ports[i]);
+  }
+});
+
 // ── SYSTEM INFO ───────────────────────────────────────────────────────────────
 ipcMain.handle('get-system-info', async () => ({
   platform: process.platform,

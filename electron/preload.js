@@ -55,4 +55,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Open external URL in default browser
   openExternal: (url) => ipcRenderer.send('open-external', url),
+
+  // DNS Lookup
+  dnsLookup: (opts) => ipcRenderer.invoke('dns-lookup', opts),
+
+  // Port Scanner
+  startPortScan:          (opts) => ipcRenderer.send('portscan-start', opts),
+  onPortScanResult:       (cb)   => ipcRenderer.on('portscan-result', (_, d) => cb(d)),
+  onPortScanDone:         (cb)   => ipcRenderer.on('portscan-done',   (_, d) => cb(d)),
+  removePortScanListeners: ()    => {
+    ipcRenderer.removeAllListeners('portscan-result');
+    ipcRenderer.removeAllListeners('portscan-done');
+  },
 });

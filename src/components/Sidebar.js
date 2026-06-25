@@ -7,6 +7,8 @@ const TABS = [
   { id: 'sweep',     label: 'Subnet Sweep',  icon: '⊞' },
   { id: 'subnet',    label: 'Subnet Calc',   icon: '⊟' },
   { id: 'ipinfo',    label: 'IP Info',       icon: '⊕' },
+  { id: 'dns',       label: 'DNS Lookup',    icon: '◈' },
+  { id: 'ports',     label: 'Port Scanner',  icon: '⊘' },
   { id: 'latency',   label: 'Latency Guide', icon: '≋' },
 ];
 
@@ -83,7 +85,7 @@ export default function Sidebar({ active, onSelect, sysInfo }) {
         )}
         <div style={s.versionRow}>
           <span style={s.versionName}>Hana</span>
-          <span style={s.versionNum}>v1.5.0</span>
+          <span style={s.versionNum}>v1.5.1</span>
         </div>
       </div>
     </aside>
