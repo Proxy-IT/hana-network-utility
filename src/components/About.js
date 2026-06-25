@@ -44,7 +44,7 @@ export default function About() {
         <div style={s.heroText}>
           <h1 style={s.heroTitle}>Hana</h1>
           <p style={s.heroSub}>Network Utility</p>
-          <div style={s.versionBadge}>v1.5.0</div>
+          <div style={s.versionBadge}>v1.6.0</div>
         </div>
       </div>
 

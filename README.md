@@ -114,7 +114,7 @@ A built-in reference for understanding what your ping results actually mean.
 ### Windows
 
 1. Go to the [Releases page](../../releases/latest)
-2. Download `Hana - Network Utility Setup 1.5.0.exe`
+2. Download `Hana - Network Utility Setup 1.6.0.exe`
 3. Run the installer and follow the prompts
 4. Launch Hana from the Start Menu
 
@@ -209,7 +209,7 @@ npm run build        # produce installer in dist/
 
 | Version | Highlights |
 |---|---|
-| v1.5.0 | Persistent module state, real-time ping results, accurate unreachable detection, npm start fix |
+| v1.6.0 | Persistent module state, real-time ping results, accurate unreachable detection, npm start fix |
 | v1.4.0 | First-launch disclaimer, About page, sidebar logo, openExternal links |
 | v1.3.0 | Multi-Ping monitor for up to 5 hosts, IP Info & WhoIs module with full export |
 | v1.2.0 | Rebranded to Hana, CSV/TXT export on all tools, redesigned subnet sweep results |
