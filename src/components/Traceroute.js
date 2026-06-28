@@ -35,6 +35,10 @@ export default function Traceroute() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [hops]);
 
+  function clearTrace() {
+    setHops([]); setDone(false);
+  }
+
   async function runTrace() {
     if (!host.trim() || running) return;
     setHops([]); setRunning(true); setDone(false);
@@ -84,11 +88,16 @@ export default function Traceroute() {
         }
       </div>
 
-      <ExportBar
-        disabled={hops.length === 0}
-        onExportTxt={() => exportTraceTxt({ host, hops })}
-        onExportCsv={() => exportTraceCsv({ host, hops })}
-      />
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <ExportBar
+          disabled={hops.length === 0}
+          onExportTxt={() => exportTraceTxt({ host, hops })}
+          onExportCsv={() => exportTraceCsv({ host, hops })}
+        />
+        {hops.length > 0 && !running && (
+          <button style={s.clearBtn} onClick={clearTrace}>✕ Clear</button>
+        )}
+      </div>
 
       {hops.length > 0 && (
         <div style={s.tableWrap}>
@@ -157,4 +166,5 @@ const s = {
   status: { display:'flex', alignItems:'center', gap:10, color:'#8892A4', fontSize:13, fontFamily:'JetBrains Mono, monospace' },
   statusDot: { width:8, height:8, borderRadius:'50%', background:'#00D4FF', animation:'pulse-dot 1s ease-in-out infinite' },
   placeholder: { textAlign:'center', color:'#3D4D65', padding:'60px 0', fontFamily:'JetBrains Mono, monospace', fontSize:12 },
+  clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
 };

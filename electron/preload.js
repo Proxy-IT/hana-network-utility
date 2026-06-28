@@ -43,11 +43,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Subnet sweep
   startSubnetSweep:     (opts) => ipcRenderer.send('subnet-sweep-start', opts),
+  startSubnetSweepList: (opts) => ipcRenderer.send('subnet-sweep-list-start', opts),
+  stopSubnetSweep:      ()     => ipcRenderer.send('subnet-sweep-stop'),
+  onSweepStopped:       (cb)   => ipcRenderer.on('sweep-stopped', (_, d) => cb(d)),
   onSweepResult:        (cb)   => ipcRenderer.on('sweep-result', (_, d) => cb(d)),
   onSweepDone:          (cb)   => ipcRenderer.on('sweep-done',   (_, d) => cb(d)),
+  onSweepError:         (cb)   => ipcRenderer.on('sweep-error',  (_, d) => cb(d)),
   removeSweepListeners: ()     => {
     ipcRenderer.removeAllListeners('sweep-result');
     ipcRenderer.removeAllListeners('sweep-done');
+    ipcRenderer.removeAllListeners('sweep-error');
   },
 
   // System info

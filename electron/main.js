@@ -283,30 +283,76 @@ ipcMain.on('traceroute-stop', (event) => {
 
 // ── SUBNET SWEEP ─────────────────────────────────────────────────────────────
 ipcMain.on('subnet-sweep-start', (event, { baseIp, start, end }) => {
+
+  // ── Security: validate all inputs server-side before use ──────────────────
+  // Strictly validate base IP — must be exactly three octets of 0-255
+  const baseIpRegex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const baseIpMatch = baseIpRegex.exec(baseIp);
+  if (!baseIpMatch) {
+    event.sender.send('sweep-error', { message: 'Invalid base IP address format.' });
+    return;
+  }
+  // Each octet must be 0-255
+  const octets = [baseIpMatch[1], baseIpMatch[2], baseIpMatch[3]];
+  if (octets.some(o => parseInt(o, 10) > 255)) {
+    event.sender.send('sweep-error', { message: 'Invalid base IP address — octet out of range.' });
+    return;
+  }
+  // Validate start/end are integers in range
+  const startInt = parseInt(start, 10);
+  const endInt   = parseInt(end, 10);
+  if (isNaN(startInt) || isNaN(endInt) || startInt < 1 || endInt > 254 || startInt > endInt) {
+    event.sender.send('sweep-error', { message: 'Invalid scan range.' });
+    return;
+  }
+
+  // Reconstruct clean base IP from validated parts — never use raw user input
+  const safeBase = `${parseInt(octets[0],10)}.${parseInt(octets[1],10)}.${parseInt(octets[2],10)}`;
+
   let completed = 0;
-  const total   = end - start + 1;
+  const total   = endInt - startInt + 1;
   const BATCH   = 20;
-  let nextIdx   = start;
+  let nextIdx   = startInt;
+
+  activeSweepProcs.add('active');
 
   function pingOne(i) {
-    const ip  = `${baseIp}.${i}`;
-    const cmd = isWin
-      ? `"${sysCmd('ping.exe')}" -n 1 -w 1500 ${ip}`
-      : `ping -c 1 -W 2 ${ip}`;
-    execShell(cmd, { timeout: 5000 }, (err, stdout) => {
+    if (!activeSweepProcs.has('active')) return;
+
+    const ip   = `${safeBase}.${i}`;
+    const cmd  = isWin ? sysCmd('ping.exe') : 'ping';
+    const args = isWin
+      ? ['-n', '1', '-w', '1500', ip]
+      : ['-c', '1', '-W', '2', ip];
+
+    const proc = spawn(cmd, args, { env: { ...process.env } });
+    activeSweepProcs.add(proc);
+    let stdout = '';
+
+    proc.stdout.on('data', d => { stdout += d.toString(); });
+    proc.on('close', () => {
+      activeSweepProcs.delete(proc);
+      if (!activeSweepProcs.has('active')) return;
+
       let alive = false;
-      if (!err && stdout) {
+      if (stdout) {
         alive = isWin
           ? /Reply from/i.test(stdout) && !/unreachable/i.test(stdout)
           : /bytes from/i.test(stdout) || /ttl=/i.test(stdout);
       }
       event.sender.send('sweep-result', { ip, alive });
       completed++;
-      if (nextIdx <= end) pingOne(nextIdx++);
-      if (completed === total) event.sender.send('sweep-done', {});
+      if (nextIdx <= endInt) pingOne(nextIdx++);
+      if (completed === total) {
+        activeSweepProcs.delete('active');
+        event.sender.send('sweep-done', {});
+      }
     });
+
+    setTimeout(() => { try { proc.kill(); } catch {} }, 5000);
   }
-  for (let i = 0; i < BATCH && nextIdx <= end; i++) pingOne(nextIdx++);
+
+  for (let i = 0; i < BATCH && nextIdx <= endInt; i++) pingOne(nextIdx++);
 });
 
 // ── OPEN EXTERNAL LINKS ──────────────────────────────────────────────────────
@@ -455,6 +501,87 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
   nextIdx = initialBatch;
   for (let i = 0; i < initialBatch; i++) {
     scanPort(ports[i]);
+  }
+});
+
+// ── SUBNET SWEEP STOP ────────────────────────────────────────────────────────
+const activeSweepProcs = new Set();
+
+ipcMain.on('subnet-sweep-stop', (event) => {
+  activeSweepProcs.forEach(proc => {
+    try {
+      if (isWin) exec(`taskkill /pid ${proc.pid} /T /F`, { shell: 'cmd.exe' });
+      else proc.kill();
+    } catch {}
+  });
+  activeSweepProcs.clear();
+  event.sender.send('sweep-stopped', {});
+});
+
+// ── SUBNET SWEEP (CIDR mode — list of IPs) ───────────────────────────────────
+ipcMain.on('subnet-sweep-list-start', (event, { ips }) => {
+  if (!Array.isArray(ips) || ips.length === 0) {
+    event.sender.send('sweep-error', { message: 'No IPs to scan.' });
+    return;
+  }
+  if (ips.length > 65534) {
+    event.sender.send('sweep-error', { message: 'Too many hosts — maximum is 65,534.' });
+    return;
+  }
+
+  // Validate every IP in the list
+  const ipRegex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  for (const ip of ips) {
+    const m = ipRegex.exec(ip);
+    if (!m || m.slice(1).some(o => parseInt(o,10) > 255)) {
+      event.sender.send('sweep-error', { message: `Invalid IP in list: ${ip}` });
+      return;
+    }
+  }
+
+  let completed = 0;
+  const total   = ips.length;
+  const BATCH   = 30;
+  let nextIdx   = BATCH;
+
+  function pingIp(ip) {
+    // Stop if sweep was cancelled
+    if (!activeSweepProcs.has('active')) return;
+
+    const cmd  = isWin ? sysCmd('ping.exe') : 'ping';
+    const args = isWin ? ['-n','1','-w','1500',ip] : ['-c','1','-W','2',ip];
+    const proc = spawn(cmd, args, { env: { ...process.env } });
+    activeSweepProcs.add(proc);
+    let stdout  = '';
+
+    proc.stdout.on('data', d => { stdout += d.toString(); });
+    proc.on('close', () => {
+      activeSweepProcs.delete(proc);
+
+      // Don't send results if sweep was stopped
+      if (!activeSweepProcs.has('active')) return;
+
+      const alive = isWin
+        ? /Reply from/i.test(stdout) && !/unreachable/i.test(stdout)
+        : /bytes from/i.test(stdout) || /ttl=/i.test(stdout);
+
+      event.sender.send('sweep-result', { ip, alive });
+      completed++;
+      if (nextIdx < ips.length) pingIp(ips[nextIdx++]);
+      if (completed === total) {
+        activeSweepProcs.delete('active');
+        event.sender.send('sweep-done', {});
+      }
+    });
+
+    setTimeout(() => { try { proc.kill(); } catch {} }, 5000);
+  }
+
+  // Mark sweep as active
+  activeSweepProcs.add('active');
+
+  for (let i = 0; i < Math.min(BATCH, ips.length); i++) {
+    pingIp(ips[i]);
   }
 });
 

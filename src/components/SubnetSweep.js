@@ -5,16 +5,67 @@ import ExportBar from './ExportBar';
 
 const isBrowser = !window.electronAPI;
 
+// Strict base IP validator — must be exactly 3 octets of 0-255, no extra chars
+function validateBaseIp(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  const trimmed = ip.trim();
+  // Must match exactly X.X.X with no trailing dot or extra content
+  const parts = trimmed.split('.');
+  if (parts.length !== 3) return false;
+  return parts.every(p => {
+    if (!/^\d{1,3}$/.test(p)) return false;
+    const n = parseInt(p, 10);
+    return n >= 0 && n <= 255;
+  });
+}
+
 // ── Default state — exported so App.js can initialise it ─────────────────────
 export const defaultSweepState = {
   baseIp:   '192.168.1',
   start:    '1',
   end:      '50',
+  cidr:     '192.168.1.0/24',
+  mode:     'range',   // 'range' or 'cidr'
   running:  false,
   results:  [],
   done:     false,
   progress: 0,
 };
+
+// ── CIDR utilities ────────────────────────────────────────────────────────────
+function ipToInt(ip) {
+  return ip.split('.').reduce((acc, o) => (acc << 8) + parseInt(o, 10), 0) >>> 0;
+}
+function intToIp(int) {
+  return [(int >>> 24)&255,(int >>> 16)&255,(int >>> 8)&255,int&255].join('.');
+}
+function parseCidr(cidr) {
+  const parts = cidr.trim().split('/');
+  if (parts.length !== 2) return null;
+  const ip     = parts[0].trim();
+  const prefix = parseInt(parts[1], 10);
+  if (isNaN(prefix) || prefix < 1 || prefix > 32) return null;
+  const ipParts = ip.split('.');
+  if (ipParts.length !== 4) return null;
+  if (!ipParts.every(p => /^\d{1,3}$/.test(p) && parseInt(p,10) <= 255)) return null;
+  const ipInt      = ipToInt(ip);
+  const maskInt    = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+  const networkInt = (ipInt & maskInt) >>> 0;
+  const broadInt   = (networkInt | ~maskInt) >>> 0;
+  const firstHost  = prefix < 31 ? networkInt + 1 : networkInt;
+  const lastHost   = prefix < 31 ? broadInt   - 1 : broadInt;
+  const totalHosts = prefix >= 31 ? Math.pow(2, 32-prefix) : Math.pow(2, 32-prefix) - 2;
+  return {
+    network:    intToIp(networkInt),
+    broadcast:  intToIp(broadInt),
+    firstHost:  intToIp(firstHost),
+    lastHost:   intToIp(lastHost),
+    firstInt:   firstHost,
+    lastInt:    lastHost,
+    totalHosts: Math.max(0, totalHosts),
+    prefix,
+  };
+}
 
 const INSTRUCTIONS = {
   title: 'How to use Subnet Sweep',
@@ -35,7 +86,7 @@ function generateFakeSweep(s, e) {
 }
 
 export default function SubnetSweep({ state, setState }) {
-  const { baseIp, start, end, running, results, done, progress } = state;
+  const { baseIp, start, end, cidr, mode, running, results, done, progress } = state;
 
   function set(patch) { setState(prev => ({ ...prev, ...patch })); }
   function setBaseIp(v)   { setState(prev => ({ ...prev, baseIp:   typeof v === 'function' ? v(prev.baseIp)   : v })); }
@@ -45,25 +96,86 @@ export default function SubnetSweep({ state, setState }) {
   function setResults(v)  { setState(prev => ({ ...prev, results:  typeof v === 'function' ? v(prev.results)  : v })); }
   function setDone(v)     { setState(prev => ({ ...prev, done:     typeof v === 'function' ? v(prev.done)     : v })); }
   function setProgress(v) { setState(prev => ({ ...prev, progress: typeof v === 'function' ? v(prev.progress) : v })); }
+  function setCidr(v)     { setState(prev => ({ ...prev, cidr:     typeof v === 'function' ? v(prev.cidr)     : v })); }
+  function setMode(v)     { setState(prev => ({ ...prev, mode:     typeof v === 'function' ? v(prev.mode)     : v })); }
 
   function startSweep() {
+    setResults([]); setRunning(true); setDone(false); setProgress(0);
+
+    if (mode === 'cidr') {
+      // ── CIDR mode ──────────────────────────────────────────────────────────
+      const parsed = parseCidr(cidr);
+      if (!parsed) {
+        alert('Invalid CIDR notation. Please enter a valid address like 192.168.1.0/24');
+        setRunning(false);
+        return;
+      }
+      if (parsed.totalHosts > 65534) {
+        alert('CIDR range too large — maximum supported is /16 (65,534 hosts).');
+        setRunning(false);
+        return;
+      }
+      if (parsed.totalHosts > 1022) {
+        const ok = window.confirm(
+          `This will sweep ${parsed.totalHosts.toLocaleString()} hosts (${parsed.firstHost} → ${parsed.lastHost}).\n\nLarge sweeps may take several minutes and generate significant network traffic.\n\nContinue?`
+        );
+        if (!ok) { setRunning(false); return; }
+      }
+
+      // Generate all IPs in the range
+      const ips = [];
+      for (let i = parsed.firstInt; i <= parsed.lastInt; i++) {
+        ips.push(intToIp(i));
+      }
+
+      if (isBrowser) {
+        sweepIpList(ips);
+        return;
+      }
+
+      let completed = 0;
+      const total   = ips.length;
+      window.electronAPI.removeSweepListeners();
+      window.electronAPI.onSweepResult(({ ip, alive }) => {
+        setResults(prev => [...prev, { ip, alive }]);
+        completed++;
+        setProgress(Math.round((completed / total) * 100));
+      });
+      window.electronAPI.onSweepDone(() => {
+        setRunning(false); setDone(true);
+        window.electronAPI.removeSweepListeners();
+      });
+      window.electronAPI.onSweepError(({ message }) => {
+        setRunning(false); setDone(false);
+        window.electronAPI.removeSweepListeners();
+        alert(`Sweep error: ${message}`);
+      });
+      window.electronAPI.onSweepStopped(() => {
+        setRunning(false); setDone(true);
+        window.electronAPI.removeSweepListeners();
+      });
+      window.electronAPI.startSubnetSweepList({ ips });
+      return;
+    }
+
+    // ── Range mode ────────────────────────────────────────────────────────────
     const s = parseInt(start, 10);
     const e = parseInt(end, 10);
     if (isNaN(s) || isNaN(e) || s > e || s < 1 || e > 254) return;
-    setResults([]); setRunning(true); setDone(false); setProgress(0);
+
+    if (!validateBaseIp(baseIp)) {
+      alert('Invalid base IP address. Please enter exactly three octets (e.g. 192.168.1)');
+      setRunning(false);
+      return;
+    }
+
     const total = e - s + 1;
 
     if (isBrowser) {
-      const aliveSet = generateFakeSweep(s, e);
-      const delay = Math.min(40, 1500 / total);
-      let i = s;
-      function drip() {
-        if (i > e) { setRunning(false); setDone(true); return; }
-        setResults(prev => [...prev, { ip: `${baseIp}.${i}`, alive: aliveSet.has(i) }]);
-        setProgress(Math.round(((i - s + 1) / total) * 100));
-        i++; setTimeout(drip, delay);
-      }
-      drip(); return;
+      const ips = [];
+      for (let i = s; i <= e; i++) ips.push(`${baseIp}.${i}`);
+      sweepIpList(ips);
+      return;
     }
 
     let completed = 0;
@@ -77,7 +189,47 @@ export default function SubnetSweep({ state, setState }) {
       setRunning(false); setDone(true);
       window.electronAPI.removeSweepListeners();
     });
-    window.electronAPI.startSubnetSweep({ baseIp, start: s, end: e });
+    window.electronAPI.onSweepError(({ message }) => {
+      setRunning(false); setDone(false);
+      window.electronAPI.removeSweepListeners();
+      alert(`Sweep error: ${message}`);
+    });
+    window.electronAPI.onSweepStopped(() => {
+      setRunning(false); setDone(true);
+      window.electronAPI.removeSweepListeners();
+    });
+    window.electronAPI.startSubnetSweep({ baseIp: baseIp.trim(), start: s, end: e });
+  }
+
+  // ── Clear sweep ───────────────────────────────────────────────────────────
+  function clearSweep() {
+    setResults([]); setDone(false); setProgress(0);
+  }
+
+  // ── Stop sweep ────────────────────────────────────────────────────────────
+  function stopSweep() {
+    if (isBrowser) {
+      setRunning(false); setDone(true);
+      return;
+    }
+    window.electronAPI.stopSubnetSweep();
+    window.electronAPI.removeSweepListeners();
+    setRunning(false); setDone(true);
+  }
+
+  // ── Browser demo sweep (works for both range and CIDR mode) ──────────────
+  function sweepIpList(ips) {
+    const total = ips.length;
+    const delay = Math.min(40, 2000 / total);
+    let i = 0;
+    function drip() {
+      if (i >= ips.length) { setRunning(false); setDone(true); return; }
+      const alive = Math.random() < 0.15;
+      setResults(prev => [...prev, { ip: ips[i], alive }]);
+      setProgress(Math.round(((i + 1) / total) * 100));
+      i++; setTimeout(drip, delay);
+    }
+    drip();
   }
 
   // Sort results by last octet numerically for display
@@ -98,18 +250,39 @@ export default function SubnetSweep({ state, setState }) {
 
       <Instructions {...INSTRUCTIONS} />
 
+      {/* Mode toggle */}
+      <div style={s.modeRow}>
+        <div style={s.modeToggle}>
+          <button style={{ ...s.modeBtn, ...(mode === 'range' ? s.modeBtnActive : {}) }}
+            onClick={() => !running && setMode('range')} disabled={running}>
+            Range
+          </button>
+          <button style={{ ...s.modeBtn, ...(mode === 'cidr' ? s.modeBtnActive : {}) }}
+            onClick={() => !running && setMode('cidr')} disabled={running}>
+            CIDR
+          </button>
+        </div>
+        <span style={s.modeHint}>
+          {mode === 'range'
+            ? 'Scan a custom range within a /24 subnet'
+            : 'Scan any subnet using CIDR notation — supports /16 to /30'}
+        </span>
+      </div>
+
       {/* Controls */}
       <div style={s.controls}>
-        <div style={s.fg}>
-          <label style={s.label}>BASE IP (first 3 octets)</label>
-          <div style={s.inputAnnotated}>
-            <input style={{ ...s.input, width:148 }} value={baseIp}
-              onChange={e => setBaseIp(e.target.value)}
-              placeholder="192.168.1" spellCheck={false} disabled={running} />
-            <span style={s.dot}>.</span>
-          </div>
-          <span style={s.hint}>e.g. 192.168.1</span>
-        </div>
+        {mode === 'range' ? (
+          <>
+            <div style={s.fg}>
+              <label style={s.label}>BASE IP (first 3 octets)</label>
+              <div style={s.inputAnnotated}>
+                <input style={{ ...s.input, width:148 }} value={baseIp}
+                  onChange={e => setBaseIp(e.target.value)}
+                  placeholder="192.168.1" spellCheck={false} disabled={running} />
+                <span style={s.dot}>.</span>
+              </div>
+              <span style={s.hint}>e.g. 192.168.1</span>
+            </div>
         <div style={s.fg}>
           <label style={s.label}>FROM (4th octet)</label>
           <input style={{ ...s.input, width:72 }} type="number" min="1" max="254"
@@ -123,17 +296,46 @@ export default function SubnetSweep({ state, setState }) {
             value={end} onChange={e => setEnd(e.target.value)} disabled={running} />
           <span style={s.hint}>1 – 254</span>
         </div>
-        <div style={{ alignSelf:'center', paddingTop:6 }}>
-          <div style={s.countBadge}>{hostCount} hosts</div>
-        </div>
-        <button style={{ ...s.btn, ...(running ? s.btnOff : {}), alignSelf:'flex-end' }}
-          onClick={startSweep} disabled={running}>
-          {running ? '⊞  Sweeping…' : '⊞  Start Sweep'}
-        </button>
+            <div style={{ alignSelf:'center', paddingTop:6 }}>
+              <div style={s.countBadge}>{hostCount} hosts</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={s.fg}>
+              <label style={s.label}>CIDR NOTATION</label>
+              <input style={{ ...s.input, width: 200 }} value={cidr}
+                onChange={e => setCidr(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !running && startSweep()}
+                placeholder="e.g. 192.168.1.0/24"
+                spellCheck={false} disabled={running} />
+              <span style={s.hint}>supports /16 to /30</span>
+            </div>
+            {(() => {
+              const parsed = parseCidr(cidr);
+              return parsed ? (
+                <div style={{ alignSelf:'center', display:'flex', flexDirection:'column', gap:4, paddingTop:6 }}>
+                  <div style={s.countBadge}>{parsed.totalHosts.toLocaleString()} hosts</div>
+                  <span style={{ fontSize:10, color:'#3D4D65', fontFamily:'JetBrains Mono, monospace', textAlign:'center' }}>
+                    {parsed.firstHost} → {parsed.lastHost}
+                  </span>
+                </div>
+              ) : null;
+            })()}
+          </>
+        )}
+        {!running
+          ? <button style={{ ...s.btn, alignSelf:'flex-end' }} onClick={startSweep}>
+              ⊞  Start Sweep
+            </button>
+          : <button style={{ ...s.btn, ...s.btnStop, alignSelf:'flex-end' }} onClick={stopSweep}>
+              ■  Stop Scan
+            </button>
+        }
       </div>
 
-      {/* IP preview */}
-      {baseIp && start && end && !running && !done && (
+      {/* Range preview */}
+      {mode === 'range' && baseIp && start && end && !running && !done && (
         <div style={s.preview}>
           Will scan <code style={s.previewCode}>{baseIp}.{start}</code>
           <span style={{ color:'#3D4D65', margin:'0 8px' }}>→</span>
@@ -142,11 +344,16 @@ export default function SubnetSweep({ state, setState }) {
       )}
 
       {/* Export bar */}
-      <ExportBar
-        disabled={results.length === 0}
-        onExportTxt={() => exportSweepTxt({ baseIp, start, end, results })}
-        onExportCsv={() => exportSweepCsv({ baseIp, start, end, results })}
-      />
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <ExportBar
+          disabled={results.length === 0}
+          onExportTxt={() => exportSweepTxt({ baseIp, start, end, cidr, mode, results })}
+          onExportCsv={() => exportSweepCsv({ baseIp, start, end, cidr, mode, results })}
+        />
+        {results.length > 0 && !running && (
+          <button style={s.clearBtn} onClick={clearSweep}>✕ Clear</button>
+        )}
+      </div>
 
       {/* Progress */}
       {(running || done) && results.length > 0 && (
@@ -227,6 +434,7 @@ const s = {
   input: { background:'#0D1525', border:'1px solid #1E2D45', borderRadius:6, color:'#E8EDF5', fontFamily:'JetBrains Mono, monospace', fontSize:13, padding:'8px 12px', outline:'none' },
   btn: { background:'rgba(0,212,255,0.1)', border:'1px solid rgba(0,212,255,0.3)', color:'#00D4FF', borderRadius:6, padding:'8px 20px', fontSize:13, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
   btnOff: { opacity:0.5, cursor:'not-allowed' },
+  btnStop: { background:'rgba(255,75,106,0.1)', border:'1px solid rgba(255,75,106,0.3)', color:'#FF4B6A' },
   countBadge: { background:'rgba(0,212,255,0.08)', border:'1px solid rgba(0,212,255,0.2)', borderRadius:20, padding:'4px 12px', fontSize:11, color:'#00D4FF', fontFamily:'JetBrains Mono, monospace', whiteSpace:'nowrap' },
   preview: { fontSize:12, color:'#8892A4', fontFamily:'JetBrains Mono, monospace', padding:'8px 14px', background:'#080D18', border:'1px solid #1E2D45', borderRadius:6 },
   previewCode: { color:'#00D4FF', fontFamily:'JetBrains Mono, monospace', background:'none', border:'none', padding:0 },
@@ -261,4 +469,10 @@ const s = {
   resultIp: { flex:1, fontWeight:500, fontSize:12 },
   resultStatus: { fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em', flexShrink:0 },
   placeholder: { textAlign:'center', color:'#3D4D65', padding:'60px 0', fontFamily:'JetBrains Mono, monospace', fontSize:12 },
+  clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
+  modeRow: { display:'flex', alignItems:'center', gap:14 },
+  modeToggle: { display:'flex', borderRadius:6, overflow:'hidden', border:'1px solid #1E2D45', flexShrink:0 },
+  modeBtn: { background:'#0D1525', border:'none', color:'#8892A4', padding:'8px 16px', fontSize:12, cursor:'pointer', fontFamily:'Inter, sans-serif', fontWeight:500 },
+  modeBtnActive: { background:'rgba(0,212,255,0.12)', color:'#00D4FF' },
+  modeHint: { fontSize:11, color:'#3D4D65', fontStyle:'italic' },
 };

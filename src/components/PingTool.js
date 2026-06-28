@@ -241,6 +241,17 @@ export default function PingTool({ state, setState }) {
     window.electronAPI.removeContinuousPingListeners();
   }
 
+  function clearPing() {
+    setState(prev => ({
+      ...prev,
+      lines:     [],
+      summary:   null,
+      samples:   [],
+      liveStats: null,
+      running:   false,
+    }));
+  }
+
   const latInfo = state.liveStats?.avg ? classifyLatency(state.liveStats.avg) :
                   state.summary?.avg   ? classifyLatency(state.summary.avg)   : null;
 
@@ -292,9 +303,10 @@ export default function PingTool({ state, setState }) {
         }
       </div>
 
-      <ExportBar
-        disabled={!hasFixedData && !hasContinuousData}
-        onExportTxt={() => exportPingTxt({
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <ExportBar
+          disabled={!hasFixedData && !hasContinuousData}
+          onExportTxt={() => exportPingTxt({
           host: state.host, output: state.summary,
           rawOutput: state.lines.map(l => l.text).join('\n'),
           samples: state.samples, liveStats: state.liveStats,
@@ -305,7 +317,11 @@ export default function PingTool({ state, setState }) {
           samples: state.samples, liveStats: state.liveStats,
           continuous: state.continuous,
         })}
-      />
+        />
+        {(hasFixedData || hasContinuousData) && !state.running && (
+          <button style={s.clearBtn} onClick={clearPing}>✕ Clear</button>
+        )}
+      </div>
 
       {/* ── FIXED MODE ── */}
       {!state.continuous && (
@@ -509,4 +525,5 @@ const s = {
   logBar: { flex:1, height:4, background:'#1A2235', borderRadius:2, overflow:'hidden' },
   logBarFill: { height:'100%', borderRadius:2, transition:'width 0.3s ease' },
   placeholder: { textAlign:'center', color:'#3D4D65', padding:'60px 0', fontFamily:'JetBrains Mono, monospace', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center', gap:10 },
+  clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
 };

@@ -182,6 +182,12 @@ export default function PortScanner() {
     window.electronAPI.startPortScan({ host: host.trim(), ports });
   }
 
+  function clearScan() {
+    setResults([]); setDone(false); setProgress(0);
+    setHost(''); setCustomPorts('');
+    setSelected(new Set(DEFAULT_PORTS));
+  }
+
   const sortedResults = [...results].sort((a, b) => a.port - b.port);
   const openPorts     = results.filter(r => r.status === 'open');
   const closedPorts   = results.filter(r => r.status === 'closed');
@@ -283,12 +289,19 @@ export default function PortScanner() {
         </div>
       </div>
 
-      {/* Export */}
-      <ExportBar
-        disabled={results.length === 0}
-        onExportTxt={() => exportScanTxt({ host, results: sortedResults })}
-        onExportCsv={() => exportScanCsv({ host, results: sortedResults })}
-      />
+      {/* Export and Clear */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <ExportBar
+          disabled={results.length === 0}
+          onExportTxt={() => exportScanTxt({ host, results: sortedResults })}
+          onExportCsv={() => exportScanCsv({ host, results: sortedResults })}
+        />
+        {results.length > 0 && !running && (
+          <button style={s.clearBtn} onClick={clearScan} title="Clear results and reset">
+            ✕ Clear
+          </button>
+        )}
+      </div>
 
       {/* Progress */}
       {(running || done) && results.length > 0 && (
@@ -412,4 +425,10 @@ const s = {
   statusBadge: { padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500, border: '1px solid', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' },
 
   placeholder: { textAlign: 'center', color: '#3D4D65', padding: '60px 0', fontFamily: 'JetBrains Mono, monospace', fontSize: 12 },
+  clearBtn: {
+    background: 'rgba(255,75,106,0.08)', border: '1px solid rgba(255,75,106,0.25)',
+    color: '#FF4B6A', borderRadius: 6, padding: '6px 14px',
+    fontSize: 11, fontWeight: 500, cursor: 'pointer',
+    fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap',
+  },
 };

@@ -94,6 +94,11 @@ export default function DnsLookup() {
 
   const effectiveServer = serverChoice === 'custom' ? customServer : serverChoice;
 
+  function clearLookup() {
+    setResults([]); setErrors([]); setQueried(null);
+    setHost('');
+  }
+
   async function runLookup() {
     if (!host.trim()) return;
     setRunning(true); setResults([]); setErrors([]);
@@ -203,11 +208,16 @@ export default function DnsLookup() {
       )}
 
       {/* Export bar */}
-      <ExportBar
-        disabled={!hasResults}
-        onExportTxt={() => exportDnsTxt({ host: queried?.host, type: queried?.type, server: queried?.server, results })}
-        onExportCsv={() => exportDnsCsv({ host: queried?.host, type: queried?.type, server: queried?.server, results })}
-      />
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <ExportBar
+          disabled={!hasResults}
+          onExportTxt={() => exportDnsTxt({ host: queried?.host, type: queried?.type, server: queried?.server, results })}
+          onExportCsv={() => exportDnsCsv({ host: queried?.host, type: queried?.type, server: queried?.server, results })}
+        />
+        {(hasResults || errors.length > 0) && !running && (
+          <button style={s.clearBtn} onClick={clearLookup}>✕ Clear</button>
+        )}
+      </div>
 
       {/* Results table */}
       {hasResults && (
@@ -299,4 +309,5 @@ const s = {
   errorType: { fontSize: 10, fontWeight: 600, color: '#3D4D65', fontFamily: 'JetBrains Mono, monospace', width: 50 },
   errorMsg: { fontSize: 11, color: '#3D4D65', fontFamily: 'JetBrains Mono, monospace' },
   placeholder: { textAlign: 'center', color: '#3D4D65', padding: '60px 0', fontFamily: 'JetBrains Mono, monospace', fontSize: 12 },
+  clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
 };

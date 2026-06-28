@@ -1,6 +1,6 @@
 {
   "name": "hana-network-utility",
-  "version": "1.6.0",
+  "version": "1.6.5",
   "description": "Hana - Network Utility",
   "author": "Your Name",
   "main": "electron/main.js",
@@ -11,7 +11,7 @@
     "react-build": "react-scripts build",
     "build": "npm run react-build && electron-builder",
     "electron": "electron .",
-    "electron-start": "node start-electron.js"
+    "electron-start": "node ./start-electron.js"
   },
   "dependencies": {
     "react": "^18.2.0",

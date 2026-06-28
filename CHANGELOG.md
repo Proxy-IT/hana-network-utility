@@ -2,6 +2,85 @@
 
 ---
 
+## v1.6.5 — June 2026
+
+### Highlights
+This release adds two new diagnostic modules, expands subnet sweep to support
+CIDR notation, hardens the application against a shell injection vulnerability,
+and adds Clear buttons across all result-bearing modules.
+
+### Security Fix
+
+#### Shell Injection Vulnerability — Subnet Sweep (CVE-class: Command Injection)
+The subnet sweep module previously passed the base IP field directly into a
+shell command string via `exec()`. A malicious value in the base IP field
+containing shell metacharacters (e.g. `&&`, `;`, `|`) could have caused
+arbitrary OS commands to be executed with the privileges of the Electron process.
+
+**Fix:**
+- Switched from `exec()` with shell string interpolation to `spawn()` with
+  argument arrays for all ping subprocess calls — arguments are passed directly
+  to the OS without shell interpretation, eliminating the entire injection surface
+- Added strict server-side validation in `main.js` — base IP is validated against
+  a strict regex and each octet is range-checked (0-255) before use
+- IP is reconstructed from parsed integer values rather than the raw user string
+- Added client-side validation in `SubnetSweep.js` for immediate user feedback
+- Both layers validate independently (defense in depth)
+
+Users on all prior versions are encouraged to update.
+
+### New Modules
+
+#### ◈ DNS Lookup
+Resolve DNS records for any hostname or IP address.
+- Supports A, AAAA, CNAME, MX, TXT, NS, and PTR record types
+- Choose DNS server: Google (8.8.8.8), Cloudflare (1.1.1.1), or custom internal
+- Color-coded record type badges with TTL and priority display
+- Automatic reverse lookup detection when an IP is entered
+- Export to .txt and .csv
+
+#### ⊘ Port Scanner
+Scan TCP ports on any host with pre-filled common ports and group presets.
+- 24 common ports as selectable chips — 22, 80, 443, 3389 pre-selected by default
+- Group presets: Web, Remote, Mail, Database, Network
+- Custom port entry for any additional ports
+- Results show Open (green), Closed (gray), Filtered (amber) with service names
+- Mandatory legal disclaimer with authorization checkbox before scanning is enabled
+- Export to .txt and .csv
+
+### Subnet Sweep Enhancements
+
+- **CIDR mode** — new Range / CIDR toggle above the controls. Enter any CIDR
+  notation (e.g. `10.0.0.0/22`) to sweep subnets larger than /24. Supports
+  /16 through /30. Live host count and range preview updates as you type
+- **Stop Scan** button — cancel any running sweep immediately. Kills all active
+  ping processes cleanly. Works for both Range and CIDR modes
+- Results are preserved when stopping mid-sweep
+
+### Clear Function
+
+Added **✕ Clear** button to five modules — appears after results are available,
+only while not actively running:
+
+- **Ping** — clears results, graph, and live stats. Keeps host and settings
+- **Traceroute** — clears hop table. Keeps host intact
+- **DNS Lookup** — clears results and errors. Resets host field
+- **Subnet Sweep** — clears results and progress. Keeps range settings
+- **Port Scanner** — clears results and resets all fields to defaults
+
+### Bug Fixes
+
+- Fixed export reports showing "Look Look Network Utility Tools" instead of
+  "Hana - Network Utility" in all report headers
+- Fixed subnet sweep CSV export showing incorrect range when run in CIDR mode
+- Fixed sweep export filename collision — CIDR sweeps now include the CIDR
+  notation in the filename (e.g. `sweep_192.168.1.0-22_timestamp.csv`)
+- Fixed `clearPing` not defined error when Clear button was clicked in Ping module
+- Fixed subnet sweep results not sorting correctly across multiple octets in
+  CIDR mode exports
+
+---
+
 ## v1.5.0 — June 2026
 
 ### Highlights

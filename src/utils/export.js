@@ -23,7 +23,7 @@ export function exportPingTxt({ host, output, rawOutput, samples, liveStats, con
   const ts = new Date().toLocaleString();
   let lines = [
     '========================================',
-    '  Look Look Network Utility Tools',
+    '  Hana - Network Utility',
     '  Ping Report',
     '========================================',
     `Host       : ${host}`,
@@ -102,7 +102,7 @@ export function exportTraceTxt({ host, hops }) {
   const ts = new Date().toLocaleString();
   const lines = [
     '========================================',
-    '  Look Look Network Utility Tools',
+    '  Hana - Network Utility',
     '  Traceroute Report',
     '========================================',
     `Destination : ${host}`,
@@ -156,16 +156,33 @@ export function exportTraceCsv({ host, hops }) {
 
 // ── SUBNET SWEEP exports ──────────────────────────────────────────────────────
 
-export function exportSweepTxt({ baseIp, start, end, results }) {
+export function exportSweepTxt({ baseIp, start, end, cidr, mode, results }) {
   const ts    = new Date().toLocaleString();
   const alive = results.filter(r => r.alive);
   const dead  = results.filter(r => !r.alive);
+
+  // Build range display based on mode
+  const sortedIps = [...results].sort((a, b) => {
+    const aParts = a.ip.split('.').map(Number);
+    const bParts = b.ip.split('.').map(Number);
+    for (let i = 0; i < 4; i++) {
+      if (aParts[i] !== bParts[i]) return aParts[i] - bParts[i];
+    }
+    return 0;
+  });
+  const firstIp = sortedIps.length ? sortedIps[0].ip : '';
+  const lastIp  = sortedIps.length ? sortedIps[sortedIps.length - 1].ip : '';
+  const rangeStr = mode === 'cidr'
+    ? `${cidr} (${firstIp} → ${lastIp})`
+    : `${baseIp}.${start} → ${baseIp}.${end}`;
+
   const lines = [
     '========================================',
-    '  Look Look Network Utility Tools',
+    '  Hana - Network Utility',
     '  Subnet Sweep Report',
     '========================================',
-    `Range      : ${baseIp}.${start} → ${baseIp}.${end}`,
+    `Mode       : ${mode === 'cidr' ? 'CIDR' : 'Range'}`,
+    `Range      : ${rangeStr}`,
     `Timestamp  : ${ts}`,
     `Scanned    : ${results.length}`,
     `Live       : ${alive.length}`,
@@ -177,23 +194,36 @@ export function exportSweepTxt({ baseIp, start, end, results }) {
     '--- No Response ---',
     ...dead.map(r => `  ${r.ip}`),
   ];
-  downloadFile(`sweep_${baseIp}_${timestamp()}.txt`, lines.join('\n'));
+
+  const filename = mode === 'cidr'
+    ? `sweep_${cidr.replace('/', '-')}_${timestamp()}.txt`
+    : `sweep_${baseIp}_${timestamp()}.txt`;
+  downloadFile(filename, lines.join('\n'));
 }
 
-export function exportSweepCsv({ baseIp, start, end, results }) {
-  const ts   = new Date().toLocaleString();
+export function exportSweepCsv({ baseIp, start, end, cidr, mode, results }) {
+  const ts = new Date().toLocaleString();
+  const rangeStr = mode === 'cidr' ? cidr : `${baseIp}.${start}-${end}`;
+
   const rows = [
-    ['IP_Address', 'Status', 'Range', 'Timestamp'],
+    ['IP_Address', 'Status', 'Mode', 'Range', 'Timestamp'],
     ...results
       .sort((a, b) => {
-        const aLast = parseInt(a.ip.split('.').pop(), 10);
-        const bLast = parseInt(b.ip.split('.').pop(), 10);
-        return aLast - bLast;
+        const aParts = a.ip.split('.').map(Number);
+        const bParts = b.ip.split('.').map(Number);
+        for (let i = 0; i < 4; i++) {
+          if (aParts[i] !== bParts[i]) return aParts[i] - bParts[i];
+        }
+        return 0;
       })
-      .map(r => [r.ip, r.alive ? 'Live' : 'No Response', `${baseIp}.${start}-${end}`, ts]),
+      .map(r => [r.ip, r.alive ? 'Live' : 'No Response', mode === 'cidr' ? 'CIDR' : 'Range', rangeStr, ts]),
   ];
+
   const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-  downloadFile(`sweep_${baseIp}_${timestamp()}.csv`, csv, 'text/csv');
+  const filename = mode === 'cidr'
+    ? `sweep_${cidr.replace('/', '-')}_${timestamp()}.csv`
+    : `sweep_${baseIp}_${timestamp()}.csv`;
+  downloadFile(filename, csv, 'text/csv');
 }
 
 // ── IP INFO exports ───────────────────────────────────────────────────────────
