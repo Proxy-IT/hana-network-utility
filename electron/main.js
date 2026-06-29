@@ -517,15 +517,19 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
     event.sender.send('portscan-error', { message: 'No ports specified.' });
     return;
   }
-  if (ports.length > 500) {
+  // Defensively coerce to integers — IPC serialization can sometimes convert
+  // numbers to strings; parseInt ensures consistent integer types
+  const normalizedPorts = ports.map(p => parseInt(p, 10));
+  if (normalizedPorts.length > 500) {
     event.sender.send('portscan-error', { message: 'Too many ports — maximum is 500.' });
     return;
   }
-  const invalidPort = ports.find(p => !Number.isInteger(p) || p < 1 || p > 65535);
+  const invalidPort = normalizedPorts.find(p => isNaN(p) || p < 1 || p > 65535);
   if (invalidPort !== undefined) {
     event.sender.send('portscan-error', { message: `Invalid port: ${invalidPort}. Ports must be integers between 1 and 65535.` });
     return;
   }
+  ports = normalizedPorts; // use the normalized array from here on
 
   const net      = require('net');
   const total    = ports.length;

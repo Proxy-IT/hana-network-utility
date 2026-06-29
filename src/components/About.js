@@ -46,7 +46,7 @@ export default function About() {
         <div style={s.heroText}>
           <h1 style={s.heroTitle}>Hana</h1>
           <p style={s.heroSub}>Network Utility</p>
-          <div style={s.versionBadge}>v1.7.0</div>
+          <div style={s.versionBadge}>v1.7.1</div>
         </div>
       </div>
 
@@ -92,7 +92,7 @@ export default function About() {
         <div style={s.section}>
           <div style={s.sectionLabel}>DETAILS</div>
           <div style={s.detailCard}>
-            <DetailRow label="Version"   value="1.7.0" />
+            <DetailRow label="Version"   value="1.7.1" />
             <DetailRow label="Platform"  value={getPlatform()} />
             <DetailRow label="License"   value="GPL v3.0" />
             <DetailRow label="Author"    value="Proxy-IT" />

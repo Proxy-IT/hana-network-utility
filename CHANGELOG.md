@@ -160,6 +160,28 @@ thousands of entries.
 
 ---
 
+## v1.7.1 — June 2026
+
+### Bug Fixes
+
+**Subnet Sweep — CIDR input freeze**
+Entering an invalid CIDR and dismissing the error dialog caused all
+inputs to become unresponsive. Root cause: `setRunning(true)` was
+called before validation, leaving the UI in a disabled state after
+the `alert()` dialog cleared. Fixed by moving all validation before
+any state changes, and replacing `alert()` with the inline error
+banner already used by other modules.
+
+**Port Scanner — custom ports not appearing in results**
+Ports entered in the custom field were not returning scan results
+when used alongside group presets. Fixed by adding explicit
+`parseInt()` coercion in both the frontend `getAllPorts()` function
+and the `main.js` IPC handler, ensuring all port values are clean
+integers regardless of how React state serialises them across the
+IPC bridge.
+
+---
+
 ## v1.7.0 — June 2026
 
 ### Highlights

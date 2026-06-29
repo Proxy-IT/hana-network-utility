@@ -103,27 +103,29 @@ export default function SubnetSweep({ state, setState }) {
   function setMode(v)     { setState(prev => ({ ...prev, mode:     typeof v === 'function' ? v(prev.mode)     : v })); }
 
   function startSweep() {
-    setResults([]); setRunning(true); setDone(false); setProgress(0); setDisplayLimit(254); set({ sweepError: null });
-
+    // ── Validate BEFORE setting running state so inputs never get stuck ────────
     if (mode === 'cidr') {
-      // ── CIDR mode ──────────────────────────────────────────────────────────
       const parsed = parseCidr(cidr);
       if (!parsed) {
-        alert('Invalid CIDR notation. Please enter a valid address like 192.168.1.0/24');
-        setRunning(false);
+        set({ sweepError: 'Invalid CIDR notation. Please enter a valid address like 192.168.1.0/24' });
         return;
       }
       if (parsed.totalHosts > 65534) {
-        alert('CIDR range too large — maximum supported is /16 (65,534 hosts).');
-        setRunning(false);
+        set({ sweepError: 'CIDR range too large — maximum supported is /16 (65,534 hosts).' });
         return;
       }
       if (parsed.totalHosts > 1022) {
         const ok = window.confirm(
           `This will sweep ${parsed.totalHosts.toLocaleString()} hosts (${parsed.firstHost} → ${parsed.lastHost}).\n\nLarge sweeps may take several minutes and generate significant network traffic.\n\nContinue?`
         );
-        if (!ok) { setRunning(false); return; }
+        if (!ok) return;
       }
+    }
+
+    setResults([]); setRunning(true); setDone(false); setProgress(0); setDisplayLimit(254); set({ sweepError: null });
+
+    if (mode === 'cidr') {
+      const parsed = parseCidr(cidr);
 
       // Generate all IPs in the range
       const ips = [];
@@ -166,8 +168,7 @@ export default function SubnetSweep({ state, setState }) {
     if (isNaN(s) || isNaN(e) || s > e || s < 1 || e > 254) return;
 
     if (!validateBaseIp(baseIp)) {
-      alert('Invalid base IP address. Please enter exactly three octets (e.g. 192.168.1)');
-      setRunning(false);
+      set({ sweepError: 'Invalid base IP address. Please enter exactly three octets (e.g. 192.168.1)' });
       return;
     }
 

@@ -137,7 +137,11 @@ export default function PortScanner() {
   }
 
   function getAllPorts() {
-    const all = new Set([...selected, ...getCustomPortList()]);
+    // Ensure everything is a proper integer — no strings, no NaN
+    const all = new Set([
+      ...[...selected].map(p => parseInt(p, 10)).filter(p => !isNaN(p)),
+      ...getCustomPortList(),
+    ]);
     return [...all].sort((a, b) => a - b);
   }
 
