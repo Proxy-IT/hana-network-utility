@@ -21,15 +21,17 @@ function validateBaseIp(ip) {
 
 // ── Default state — exported so App.js can initialise it ─────────────────────
 export const defaultSweepState = {
-  baseIp:   '192.168.1',
-  start:    '1',
-  end:      '50',
-  cidr:     '192.168.1.0/24',
-  mode:     'range',   // 'range' or 'cidr'
-  running:  false,
-  results:  [],
-  done:     false,
-  progress: 0,
+  baseIp:       '192.168.1',
+  start:        '1',
+  end:          '50',
+  cidr:         '192.168.1.0/24',
+  mode:         'range',   // 'range' or 'cidr'
+  running:      false,
+  results:      [],
+  done:         false,
+  progress:     0,
+  displayLimit: 254,       // show first 254 results, expand on demand
+  sweepError:   null,
 };
 
 // ── CIDR utilities ────────────────────────────────────────────────────────────
@@ -86,7 +88,7 @@ function generateFakeSweep(s, e) {
 }
 
 export default function SubnetSweep({ state, setState }) {
-  const { baseIp, start, end, cidr, mode, running, results, done, progress } = state;
+  const { baseIp, start, end, cidr, mode, running, results, done, progress, displayLimit, sweepError } = state;
 
   function set(patch) { setState(prev => ({ ...prev, ...patch })); }
   function setBaseIp(v)   { setState(prev => ({ ...prev, baseIp:   typeof v === 'function' ? v(prev.baseIp)   : v })); }
@@ -95,12 +97,13 @@ export default function SubnetSweep({ state, setState }) {
   function setRunning(v)  { setState(prev => ({ ...prev, running:  typeof v === 'function' ? v(prev.running)  : v })); }
   function setResults(v)  { setState(prev => ({ ...prev, results:  typeof v === 'function' ? v(prev.results)  : v })); }
   function setDone(v)     { setState(prev => ({ ...prev, done:     typeof v === 'function' ? v(prev.done)     : v })); }
-  function setProgress(v) { setState(prev => ({ ...prev, progress: typeof v === 'function' ? v(prev.progress) : v })); }
+  function setProgress(v)     { setState(prev => ({ ...prev, progress:     typeof v === 'function' ? v(prev.progress)     : v })); }
+  function setDisplayLimit(v) { setState(prev => ({ ...prev, displayLimit: typeof v === 'function' ? v(prev.displayLimit) : v })); }
   function setCidr(v)     { setState(prev => ({ ...prev, cidr:     typeof v === 'function' ? v(prev.cidr)     : v })); }
   function setMode(v)     { setState(prev => ({ ...prev, mode:     typeof v === 'function' ? v(prev.mode)     : v })); }
 
   function startSweep() {
-    setResults([]); setRunning(true); setDone(false); setProgress(0);
+    setResults([]); setRunning(true); setDone(false); setProgress(0); setDisplayLimit(254); set({ sweepError: null });
 
     if (mode === 'cidr') {
       // ── CIDR mode ──────────────────────────────────────────────────────────
@@ -146,9 +149,8 @@ export default function SubnetSweep({ state, setState }) {
         window.electronAPI.removeSweepListeners();
       });
       window.electronAPI.onSweepError(({ message }) => {
-        setRunning(false); setDone(false);
+        setRunning(false); setDone(false); set({ sweepError: message });
         window.electronAPI.removeSweepListeners();
-        alert(`Sweep error: ${message}`);
       });
       window.electronAPI.onSweepStopped(() => {
         setRunning(false); setDone(true);
@@ -190,9 +192,8 @@ export default function SubnetSweep({ state, setState }) {
       window.electronAPI.removeSweepListeners();
     });
     window.electronAPI.onSweepError(({ message }) => {
-      setRunning(false); setDone(false);
+      setRunning(false); setDone(false); set({ sweepError: message });
       window.electronAPI.removeSweepListeners();
-      alert(`Sweep error: ${message}`);
     });
     window.electronAPI.onSweepStopped(() => {
       setRunning(false); setDone(true);
@@ -203,7 +204,7 @@ export default function SubnetSweep({ state, setState }) {
 
   // ── Clear sweep ───────────────────────────────────────────────────────────
   function clearSweep() {
-    setResults([]); setDone(false); setProgress(0);
+    setResults([]); setDone(false); setProgress(0); setDisplayLimit(254); set({ sweepError: null });
   }
 
   // ── Stop sweep ────────────────────────────────────────────────────────────
@@ -469,6 +470,14 @@ const s = {
   resultIp: { flex:1, fontWeight:500, fontSize:12 },
   resultStatus: { fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em', flexShrink:0 },
   placeholder: { textAlign:'center', color:'#3D4D65', padding:'60px 0', fontFamily:'JetBrains Mono, monospace', fontSize:12 },
+  errorBanner: { display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.3)', borderRadius:8, animation:'fadeIn 0.2s ease' },
+  errorBannerIcon: { fontSize:16, color:'#FF4B6A', flexShrink:0 },
+  errorBannerMsg: { flex:1, fontSize:12, color:'#FF4B6A', fontFamily:'JetBrains Mono, monospace' },
+  errorBannerClose: { background:'transparent', border:'none', color:'#FF4B6A', cursor:'pointer', fontSize:14, padding:'0 4px', fontFamily:'Inter, sans-serif' },
+  paginationBar: { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'#0D1525', border:'1px solid #1E2D45', borderRadius:6 },
+  paginationText: { fontSize:11, color:'#8892A4', fontFamily:'JetBrains Mono, monospace' },
+  expandBtn: { background:'rgba(0,212,255,0.08)', border:'1px solid rgba(0,212,255,0.2)', color:'#00D4FF', borderRadius:5, padding:'4px 12px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
+  expandBtnBottom: { width:'100%', marginTop:4, padding:'8px', textAlign:'center' },
   clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
   modeRow: { display:'flex', alignItems:'center', gap:14 },
   modeToggle: { display:'flex', borderRadius:6, overflow:'hidden', border:'1px solid #1E2D45', flexShrink:0 },

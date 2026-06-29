@@ -25,6 +25,7 @@ export const defaultPingState = {
   count:      '4',
   continuous: false,
   running:    false,
+  errorMsg:   null,
   // Fixed mode
   lines:      [],   // { text, rtt, timeout, isErr }
   summary:    null, // { min, max, avg, packetLoss }
@@ -120,6 +121,12 @@ export default function PingTool({ state, setState }) {
   // ── Fixed ping (streaming) ─────────────────────────────────────────────────
   function runPing() {
     if (!state.host.trim()) return;
+    // Validate on the frontend first — immediate feedback without IPC round-trip
+    const validationError = validateHostClient(state.host);
+    if (validationError) {
+      setState(prev => ({ ...prev, errorMsg: validationError, lines: [], summary: null }));
+      return;
+    }
     // Clear immediately so no stale results show
     setState(prev => ({ ...prev, running: true, lines: [], summary: null }));
 
@@ -159,8 +166,14 @@ export default function PingTool({ state, setState }) {
 
     window.electronAPI.removePingListeners();
     window.electronAPI.onPingLine(({ line, rtt, timeout, unreachable, isErr }) => {
-      // Values are pre-parsed in main.js — trust them directly
       if (!line || !line.trim()) return;
+      // Detect Windows/Mac DNS failure messages — route to error banner not results
+      const isFatalError = /could not find host|unknown host|name or service not known|cannot resolve|bad address/i.test(line);
+      if (isFatalError) {
+        setState(prev => ({ ...prev, running: false, errorMsg: line.trim() }));
+        window.electronAPI.removePingListeners();
+        return;
+      }
       setState(prev => ({
         ...prev,
         lines: [...prev.lines, {
@@ -178,6 +191,10 @@ export default function PingTool({ state, setState }) {
         running: false,
         summary: parseSummary(output),
       }));
+      window.electronAPI.removePingListeners();
+    });
+    window.electronAPI.onPingError(({ message }) => {
+      setState(prev => ({ ...prev, running: false, errorMsg: message }));
       window.electronAPI.removePingListeners();
     });
     window.electronAPI.startPing({ host: state.host.trim(), count: parseInt(state.count, 10) });
@@ -207,11 +224,27 @@ export default function PingTool({ state, setState }) {
     });
   }, [setState]);
 
+  // Client-side host validator — immediate feedback without IPC round-trip
+  function validateHostClient(host) {
+    const trimmed = (host || '').trim();
+    if (!trimmed) return 'Please enter a hostname or IP address.';
+    if (trimmed.length > 253) return 'Hostname is too long (max 253 characters).';
+    if (!/^[a-zA-Z0-9._:\-]+$/.test(trimmed)) {
+      return '"' + trimmed + '" is not a valid hostname or IP address.';
+    }
+    return null;
+  }
+
   function startContinuous() {
     if (!state.host.trim()) return;
+    const validationError = validateHostClient(state.host);
+    if (validationError) {
+      setState(prev => ({ ...prev, errorMsg: validationError }));
+      return;
+    }
     statsRef.current = { min: Infinity, max: -Infinity, sum: 0, count: 0, lost: 0, sent: 0 };
     seqRef.current   = 0;
-    set({ running: true, samples: [], liveStats: null });
+    setState(prev => ({ ...prev, running: true, samples: [], liveStats: null, errorMsg: null }));
 
     if (isBrowser) {
       const interval = setInterval(() => {
@@ -229,6 +262,10 @@ export default function PingTool({ state, setState }) {
     });
     window.electronAPI.onContinuousPingStopped(() => {
       set({ running: false });
+      window.electronAPI.removeContinuousPingListeners();
+    });
+    window.electronAPI.onContinuousPingError?.(({ message }) => {
+      setState(prev => ({ ...prev, running: false, errorMsg: message }));
       window.electronAPI.removeContinuousPingListeners();
     });
     window.electronAPI.startContinuousPing({ host: state.host.trim() });
@@ -249,6 +286,7 @@ export default function PingTool({ state, setState }) {
       samples:   [],
       liveStats: null,
       running:   false,
+      errorMsg:  null,
     }));
   }
 
@@ -302,6 +340,15 @@ export default function PingTool({ state, setState }) {
             </button>
         }
       </div>
+
+      {/* Inline error banner */}
+      {state.errorMsg && (
+        <div style={s.errorBanner}>
+          <span style={s.errorBannerIcon}>⚠</span>
+          <span style={s.errorBannerMsg}>{state.errorMsg}</span>
+          <button style={s.errorBannerClose} onClick={() => setState(prev => ({ ...prev, errorMsg: null }))}>✕</button>
+        </div>
+      )}
 
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
         <ExportBar
@@ -525,5 +572,9 @@ const s = {
   logBar: { flex:1, height:4, background:'#1A2235', borderRadius:2, overflow:'hidden' },
   logBarFill: { height:'100%', borderRadius:2, transition:'width 0.3s ease' },
   placeholder: { textAlign:'center', color:'#3D4D65', padding:'60px 0', fontFamily:'JetBrains Mono, monospace', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center', gap:10 },
+  errorBanner: { display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.3)', borderRadius:8, animation:'fadeIn 0.2s ease' },
+  errorBannerIcon: { fontSize:16, color:'#FF4B6A', flexShrink:0 },
+  errorBannerMsg: { flex:1, fontSize:12, color:'#FF4B6A', fontFamily:'JetBrains Mono, monospace' },
+  errorBannerClose: { background:'transparent', border:'none', color:'#FF4B6A', cursor:'pointer', fontSize:14, padding:'0 4px', fontFamily:'Inter, sans-serif' },
   clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
 };

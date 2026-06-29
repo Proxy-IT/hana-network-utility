@@ -64,8 +64,19 @@ function execShell(cmd, opts, cb) {
 
 // ── PING (streaming, line by line) ───────────────────────────────────────────
 ipcMain.on('ping-start', (event, { host, count }) => {
+  // Validate inputs
+  if (!isValidHost(host)) {
+    event.sender.send('ping-error', { message: 'Invalid hostname or IP address.' });
+    return;
+  }
+  const countInt = parseInt(count, 10);
+  if (isNaN(countInt) || countInt < 1 || countInt > 100) {
+    event.sender.send('ping-error', { message: 'Packet count must be between 1 and 100.' });
+    return;
+  }
+
   const cmd  = isWin ? sysCmd('ping.exe') : 'ping';
-  const args = isWin ? ['-n', String(count), host] : ['-c', String(count), host];
+  const args = isWin ? ['-n', String(countInt), host.trim()] : ['-c', String(countInt), host.trim()];
   const proc = spawn(cmd, args, { env: { ...process.env } });
   let fullOutput = '';
 
@@ -138,6 +149,10 @@ ipcMain.on('ping-stop', (event) => {
 const continuousProcs = new Map();
 
 ipcMain.on('ping-continuous-start', (event, { host }) => {
+  if (!isValidHost(host)) {
+    event.sender.send('ping-continuous-error', { message: 'Invalid hostname or IP address.' });
+    return;
+  }
   const cmd  = isWin ? sysCmd('ping.exe') : 'ping';
   const args = isWin ? ['-t', host] : [host];
   const proc = spawn(cmd, args, { env: { ...process.env } });
@@ -188,6 +203,10 @@ ipcMain.on('ping-continuous-stop', (event) => {
 const multiPingProcs = new Map();
 
 ipcMain.on('multi-ping-start', (event, { slotId, host }) => {
+  if (!isValidHost(host)) {
+    event.sender.send('multi-ping-error', { slotId, message: 'Invalid hostname or IP address.' });
+    return;
+  }
   // Kill existing proc for this slot if any
   if (multiPingProcs.has(slotId)) {
     const old = multiPingProcs.get(slotId);
@@ -248,6 +267,10 @@ ipcMain.on('multi-ping-stop', (event, { slotId }) => {
 
 // ── TRACEROUTE ────────────────────────────────────────────────────────────────
 ipcMain.on('traceroute-start', (event, { host }) => {
+  if (!isValidHost(host)) {
+    event.sender.send('traceroute-error', { message: 'Invalid hostname or IP address.' });
+    return;
+  }
   const cmd     = isWin ? sysCmd('tracert.exe') : 'traceroute';
   const cmdArgs = isWin ? ['-d', host] : ['-m', '30', host];
   const proc    = spawn(cmd, cmdArgs, { env: { ...process.env } });
@@ -314,10 +337,10 @@ ipcMain.on('subnet-sweep-start', (event, { baseIp, start, end }) => {
   const BATCH   = 20;
   let nextIdx   = startInt;
 
-  activeSweepProcs.add('active');
+  sweepActive = true;
 
   function pingOne(i) {
-    if (!activeSweepProcs.has('active')) return;
+    if (!sweepActive) return;
 
     const ip   = `${safeBase}.${i}`;
     const cmd  = isWin ? sysCmd('ping.exe') : 'ping';
@@ -332,7 +355,7 @@ ipcMain.on('subnet-sweep-start', (event, { baseIp, start, end }) => {
     proc.stdout.on('data', d => { stdout += d.toString(); });
     proc.on('close', () => {
       activeSweepProcs.delete(proc);
-      if (!activeSweepProcs.has('active')) return;
+      if (!sweepActive) return;
 
       let alive = false;
       if (stdout) {
@@ -344,7 +367,7 @@ ipcMain.on('subnet-sweep-start', (event, { baseIp, start, end }) => {
       completed++;
       if (nextIdx <= endInt) pingOne(nextIdx++);
       if (completed === total) {
-        activeSweepProcs.delete('active');
+        sweepActive = false;
         event.sender.send('sweep-done', {});
       }
     });
@@ -355,6 +378,32 @@ ipcMain.on('subnet-sweep-start', (event, { baseIp, start, end }) => {
   for (let i = 0; i < BATCH && nextIdx <= endInt; i++) pingOne(nextIdx++);
 });
 
+// ── INPUT VALIDATION HELPERS ─────────────────────────────────────────────────
+function isValidHost(host) {
+  if (!host || typeof host !== 'string') return false;
+  const trimmed = host.trim();
+  if (trimmed.length === 0 || trimmed.length > 253) return false;
+  // Block shell metacharacters and characters invalid in hostnames/IPs
+  if (/[;&|`$<>\(\)\[\]{}'"\\@!#%^*=+,~]/.test(trimmed)) return false;
+  // Must contain only valid hostname/IP characters
+  if (!/^[a-zA-Z0-9._:\-]+$/.test(trimmed)) return false;
+  return true;
+}
+
+function isValidIpv4(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  const parts = ip.trim().split('.');
+  if (parts.length !== 4) return false;
+  return parts.every(p => /^\d{1,3}$/.test(p) && parseInt(p, 10) <= 255);
+}
+
+function isValidIpv6(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  return /^[0-9a-fA-F:]+$/.test(ip.trim()) && ip.includes(':');
+}
+
+const VALID_DNS_TYPES = new Set(['A','AAAA','CNAME','MX','TXT','NS','PTR','ALL']);
+
 // ── OPEN EXTERNAL LINKS ──────────────────────────────────────────────────────
 ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
@@ -362,15 +411,26 @@ ipcMain.on('open-external', (event, url) => {
 
 // ── DNS LOOKUP ───────────────────────────────────────────────────────────────
 ipcMain.handle('dns-lookup', async (event, { host, type, server }) => {
+  // Validate host
+  if (!isValidHost(host)) {
+    return { success: false, results: [], errors: [{ type: 'ERROR', message: 'Invalid hostname or IP address.' }] };
+  }
+  // Validate record type against allowlist
+  if (!VALID_DNS_TYPES.has(type)) {
+    return { success: false, results: [], errors: [{ type: 'ERROR', message: `Invalid record type: ${type}` }] };
+  }
+  // Validate DNS server if custom
+  if (server && server !== '8.8.8.8' && server !== '1.1.1.1') {
+    if (!isValidIpv4(server) && !isValidIpv6(server)) {
+      return { success: false, results: [], errors: [{ type: 'ERROR', message: 'Invalid DNS server address.' }] };
+    }
+  }
+
   return new Promise((resolve) => {
     const dns = require('dns');
-
-    // Use custom DNS server if provided
-    if (server && server !== '8.8.8.8' && server !== '1.1.1.1') {
-      dns.setServers([server]);
-    } else if (server) {
-      dns.setServers([server]);
-    }
+    // Use per-request resolver for isolation — never mutate global dns settings
+    const resolver = new dns.Resolver();
+    if (server) resolver.setServers([server.trim()]);
 
     const results = [];
     const errors  = [];
@@ -393,43 +453,43 @@ ipcMain.handle('dns-lookup', async (event, { host, type, server }) => {
 
       try {
         if (t === 'A') {
-          dns.resolve4(host, { ttl: true }, (err, addrs) => {
+          resolver.resolve4(host.trim(), { ttl: true }, (err, addrs) => {
             if (!err && addrs) addrs.forEach(a => results.push({ type: 'A', value: a.address, ttl: a.ttl }));
             else if (err) errors.push({ type: 'A', message: err.message });
             done();
           });
         } else if (t === 'AAAA') {
-          dns.resolve6(host, { ttl: true }, (err, addrs) => {
+          resolver.resolve6(host.trim(), { ttl: true }, (err, addrs) => {
             if (!err && addrs) addrs.forEach(a => results.push({ type: 'AAAA', value: a.address, ttl: a.ttl }));
             else if (err) errors.push({ type: 'AAAA', message: err.message });
             done();
           });
         } else if (t === 'CNAME') {
-          dns.resolveCname(host, (err, addrs) => {
+          resolver.resolveCname(host.trim(), (err, addrs) => {
             if (!err && addrs) addrs.forEach(a => results.push({ type: 'CNAME', value: a, ttl: null }));
             else if (err) errors.push({ type: 'CNAME', message: err.message });
             done();
           });
         } else if (t === 'MX') {
-          dns.resolveMx(host, (err, addrs) => {
+          resolver.resolveMx(host.trim(), (err, addrs) => {
             if (!err && addrs) addrs.forEach(a => results.push({ type: 'MX', value: a.exchange, priority: a.priority, ttl: null }));
             else if (err) errors.push({ type: 'MX', message: err.message });
             done();
           });
         } else if (t === 'TXT') {
-          dns.resolveTxt(host, (err, addrs) => {
+          resolver.resolveTxt(host.trim(), (err, addrs) => {
             if (!err && addrs) addrs.forEach(a => results.push({ type: 'TXT', value: a.join(' '), ttl: null }));
             else if (err) errors.push({ type: 'TXT', message: err.message });
             done();
           });
         } else if (t === 'NS') {
-          dns.resolveNs(host, (err, addrs) => {
+          resolver.resolveNs(host.trim(), (err, addrs) => {
             if (!err && addrs) addrs.forEach(a => results.push({ type: 'NS', value: a, ttl: null }));
             else if (err) errors.push({ type: 'NS', message: err.message });
             done();
           });
         } else if (t === 'PTR') {
-          dns.reverse(host, (err, addrs) => {
+          resolver.reverse(host.trim(), (err, addrs) => {
             if (!err && addrs) addrs.forEach(a => results.push({ type: 'PTR', value: a, ttl: null }));
             else if (err) errors.push({ type: 'PTR', message: err.message });
             done();
@@ -447,6 +507,26 @@ ipcMain.handle('dns-lookup', async (event, { host, type, server }) => {
 
 // ── PORT SCANNER ──────────────────────────────────────────────────────────────
 ipcMain.on('portscan-start', (event, { host, ports }) => {
+  // Validate host
+  if (!isValidHost(host)) {
+    event.sender.send('portscan-error', { message: 'Invalid hostname or IP address.' });
+    return;
+  }
+  // Validate ports array
+  if (!Array.isArray(ports) || ports.length === 0) {
+    event.sender.send('portscan-error', { message: 'No ports specified.' });
+    return;
+  }
+  if (ports.length > 500) {
+    event.sender.send('portscan-error', { message: 'Too many ports — maximum is 500.' });
+    return;
+  }
+  const invalidPort = ports.find(p => !Number.isInteger(p) || p < 1 || p > 65535);
+  if (invalidPort !== undefined) {
+    event.sender.send('portscan-error', { message: `Invalid port: ${invalidPort}. Ports must be integers between 1 and 65535.` });
+    return;
+  }
+
   const net      = require('net');
   const total    = ports.length;
   let completed  = 0;
@@ -505,9 +585,12 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
 });
 
 // ── SUBNET SWEEP STOP ────────────────────────────────────────────────────────
-const activeSweepProcs = new Set();
+// Separate active flag from process set — fixes taskkill /pid undefined bug
+let sweepActive = false;
+const activeSweepProcs = new Set(); // contains ONLY process objects
 
 ipcMain.on('subnet-sweep-stop', (event) => {
+  sweepActive = false;
   activeSweepProcs.forEach(proc => {
     try {
       if (isWin) exec(`taskkill /pid ${proc.pid} /T /F`, { shell: 'cmd.exe' });
@@ -545,8 +628,7 @@ ipcMain.on('subnet-sweep-list-start', (event, { ips }) => {
   let nextIdx   = BATCH;
 
   function pingIp(ip) {
-    // Stop if sweep was cancelled
-    if (!activeSweepProcs.has('active')) return;
+    if (!sweepActive) return;
 
     const cmd  = isWin ? sysCmd('ping.exe') : 'ping';
     const args = isWin ? ['-n','1','-w','1500',ip] : ['-c','1','-W','2',ip];
@@ -557,9 +639,7 @@ ipcMain.on('subnet-sweep-list-start', (event, { ips }) => {
     proc.stdout.on('data', d => { stdout += d.toString(); });
     proc.on('close', () => {
       activeSweepProcs.delete(proc);
-
-      // Don't send results if sweep was stopped
-      if (!activeSweepProcs.has('active')) return;
+      if (!sweepActive) return;
 
       const alive = isWin
         ? /Reply from/i.test(stdout) && !/unreachable/i.test(stdout)
@@ -569,7 +649,7 @@ ipcMain.on('subnet-sweep-list-start', (event, { ips }) => {
       completed++;
       if (nextIdx < ips.length) pingIp(ips[nextIdx++]);
       if (completed === total) {
-        activeSweepProcs.delete('active');
+        sweepActive = false;
         event.sender.send('sweep-done', {});
       }
     });
@@ -577,8 +657,7 @@ ipcMain.on('subnet-sweep-list-start', (event, { ips }) => {
     setTimeout(() => { try { proc.kill(); } catch {} }, 5000);
   }
 
-  // Mark sweep as active
-  activeSweepProcs.add('active');
+  sweepActive = true;
 
   for (let i = 0; i < Math.min(BATCH, ips.length); i++) {
     pingIp(ips[i]);

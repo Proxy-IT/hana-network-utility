@@ -4,11 +4,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Streaming ping (fixed count, results arrive line by line)
   startPing:          (opts) => ipcRenderer.send('ping-start', opts),
   stopPing:           ()     => ipcRenderer.send('ping-stop'),
-  onPingLine:         (cb)   => ipcRenderer.on('ping-line', (_, d) => cb(d)),
-  onPingDone:         (cb)   => ipcRenderer.on('ping-done', (_, d) => cb(d)),
+  onPingLine:         (cb)   => ipcRenderer.on('ping-line',  (_, d) => cb(d)),
+  onPingDone:         (cb)   => ipcRenderer.on('ping-done',  (_, d) => cb(d)),
+  onPingError:        (cb)   => ipcRenderer.on('ping-error', (_, d) => cb(d)),
   removePingListeners: ()    => {
     ipcRenderer.removeAllListeners('ping-line');
     ipcRenderer.removeAllListeners('ping-done');
+    ipcRenderer.removeAllListeners('ping-error');
   },
 
   // Continuous ping (single host)
@@ -53,6 +55,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('sweep-result');
     ipcRenderer.removeAllListeners('sweep-done');
     ipcRenderer.removeAllListeners('sweep-error');
+    ipcRenderer.removeAllListeners('sweep-stopped');
   },
 
   // System info
@@ -68,8 +71,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startPortScan:          (opts) => ipcRenderer.send('portscan-start', opts),
   onPortScanResult:       (cb)   => ipcRenderer.on('portscan-result', (_, d) => cb(d)),
   onPortScanDone:         (cb)   => ipcRenderer.on('portscan-done',   (_, d) => cb(d)),
+  onPortScanError:        (cb)   => ipcRenderer.on('portscan-error',  (_, d) => cb(d)),
   removePortScanListeners: ()    => {
     ipcRenderer.removeAllListeners('portscan-result');
     ipcRenderer.removeAllListeners('portscan-done');
+    ipcRenderer.removeAllListeners('portscan-error');
   },
 });

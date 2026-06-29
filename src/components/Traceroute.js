@@ -29,6 +29,7 @@ const INSTRUCTIONS = {
 export default function Traceroute() {
   const [host, setHost]       = useState('8.8.8.8');
   const [hops, setHops]       = useState([]);
+  const [errorMsg, setErrorMsg] = useState(null);
   const [running, setRunning] = useState(false);
   const [done, setDone]       = useState(false);
   const endRef = useRef(null);
@@ -36,12 +37,22 @@ export default function Traceroute() {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [hops]);
 
   function clearTrace() {
-    setHops([]); setDone(false);
+    setHops([]); setDone(false); setErrorMsg(null);
+  }
+
+  function validateHostInput(host) {
+    const trimmed = (host || '').trim();
+    if (!trimmed) return 'Please enter a hostname or IP address.';
+    if (trimmed.length > 253) return 'Hostname is too long (max 253 characters).';
+    if (!/^[a-zA-Z0-9._:\-]+$/.test(trimmed)) return `"${trimmed}" is not a valid hostname or IP address.`;
+    return null;
   }
 
   async function runTrace() {
     if (!host.trim() || running) return;
-    setHops([]); setRunning(true); setDone(false);
+    const ve = validateHostInput(host);
+    if (ve) { setErrorMsg(ve); return; }
+    setHops([]); setRunning(true); setDone(false); setErrorMsg(null);
     if (isBrowser) {
       for (let i = 0; i < FAKE.length; i++) {
         await new Promise(r => setTimeout(r, 400));
@@ -55,6 +66,10 @@ export default function Traceroute() {
     });
     window.electronAPI.onTracerouteDone(() => {
       setRunning(false); setDone(true);
+      window.electronAPI.removeTracerouteListeners();
+    });
+    window.electronAPI.onTracerouteError?.(({ message }) => {
+      setRunning(false); setErrorMsg(message);
       window.electronAPI.removeTracerouteListeners();
     });
     window.electronAPI.startTraceroute({ host: host.trim() });
@@ -88,6 +103,13 @@ export default function Traceroute() {
         }
       </div>
 
+      {errorMsg && (
+        <div style={s.errorBanner}>
+          <span style={s.errorBannerIcon}>⚠</span>
+          <span style={s.errorBannerMsg}>{errorMsg}</span>
+          <button style={s.errorBannerClose} onClick={() => setErrorMsg(null)}>✕</button>
+        </div>
+      )}
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
         <ExportBar
           disabled={hops.length === 0}
@@ -166,5 +188,9 @@ const s = {
   status: { display:'flex', alignItems:'center', gap:10, color:'#8892A4', fontSize:13, fontFamily:'JetBrains Mono, monospace' },
   statusDot: { width:8, height:8, borderRadius:'50%', background:'#00D4FF', animation:'pulse-dot 1s ease-in-out infinite' },
   placeholder: { textAlign:'center', color:'#3D4D65', padding:'60px 0', fontFamily:'JetBrains Mono, monospace', fontSize:12 },
+  errorBanner: { display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.3)', borderRadius:8, animation:'fadeIn 0.2s ease' },
+  errorBannerIcon: { fontSize:16, color:'#FF4B6A', flexShrink:0 },
+  errorBannerMsg: { flex:1, fontSize:12, color:'#FF4B6A', fontFamily:'JetBrains Mono, monospace' },
+  errorBannerClose: { background:'transparent', border:'none', color:'#FF4B6A', cursor:'pointer', fontSize:14, padding:'0 4px', fontFamily:'Inter, sans-serif' },
   clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
 };

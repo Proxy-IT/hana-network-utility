@@ -4,9 +4,11 @@ const MODULES = [
   { icon: '◎', name: 'Ping',          desc: 'Fixed and continuous ping with live RTT graph and packet loss tracking' },
   { icon: '⊛', name: 'Multi-Ping',    desc: 'Monitor up to 5 hosts simultaneously — green when up, red when down' },
   { icon: '⤵', name: 'Traceroute',    desc: 'Live hop-by-hop path tracing with color-coded latency per hop' },
-  { icon: '⊞', name: 'Subnet Sweep',  desc: 'Ping-sweep a range to discover live and non-responding hosts' },
+  { icon: '⊞', name: 'Subnet Sweep',  desc: 'Ping-sweep a range or CIDR subnet to discover live hosts — supports /16 to /30' },
   { icon: '⊟', name: 'Subnet Calc',   desc: 'Full CIDR breakdown with network, host range, and binary view' },
   { icon: '⊕', name: 'IP Info',       desc: 'Public IP, geolocation lookup, and WhoIs for any domain or IP' },
+  { icon: '◈', name: 'DNS Lookup',    desc: 'Resolve A, AAAA, CNAME, MX, TXT, NS, PTR records using any DNS server' },
+  { icon: '⊘', name: 'Port Scanner',  desc: 'TCP port scanner with common port presets and group selection' },
   { icon: '≋', name: 'Latency Guide', desc: 'Reference tiers and per-application latency thresholds' },
 ];
 
@@ -44,7 +46,7 @@ export default function About() {
         <div style={s.heroText}>
           <h1 style={s.heroTitle}>Hana</h1>
           <p style={s.heroSub}>Network Utility</p>
-          <div style={s.versionBadge}>v1.6.5</div>
+          <div style={s.versionBadge}>v1.7.0</div>
         </div>
       </div>
 
@@ -90,7 +92,7 @@ export default function About() {
         <div style={s.section}>
           <div style={s.sectionLabel}>DETAILS</div>
           <div style={s.detailCard}>
-            <DetailRow label="Version"   value="1.4.0" />
+            <DetailRow label="Version"   value="1.7.0" />
             <DetailRow label="Platform"  value={getPlatform()} />
             <DetailRow label="License"   value="GPL v3.0" />
             <DetailRow label="Author"    value="Proxy-IT" />

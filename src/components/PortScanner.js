@@ -109,6 +109,7 @@ export default function PortScanner() {
   const [done, setDone]             = useState(false);
   const [progress, setProgress]     = useState(0);
   const [disclaimer, setDisclaimer] = useState(false);
+  const [errorMsg, setErrorMsg]     = useState(null);
   const totalRef = useRef(0);
 
   function togglePort(port) {
@@ -143,11 +144,13 @@ export default function PortScanner() {
   function startScan() {
     if (!host.trim()) return;
     if (!disclaimer) return;
+    const ve = validateHostInput(host);
+    if (ve) { setErrorMsg(ve); return; }
 
     const ports = getAllPorts();
     if (ports.length === 0) return;
 
-    setResults([]); setRunning(true); setDone(false); setProgress(0);
+    setResults([]); setRunning(true); setDone(false); setProgress(0); setErrorMsg(null);
     totalRef.current = ports.length;
     let completed = 0;
 
@@ -179,14 +182,27 @@ export default function PortScanner() {
       setRunning(false); setDone(true);
       window.electronAPI.removePortScanListeners();
     });
+    window.electronAPI.onPortScanError?.(({ message }) => {
+      setRunning(false); setDone(false); setErrorMsg(message);
+      window.electronAPI.removePortScanListeners();
+    });
     window.electronAPI.startPortScan({ host: host.trim(), ports });
   }
 
   function clearScan() {
     setResults([]); setDone(false); setProgress(0);
-    setHost(''); setCustomPorts('');
+    setHost(''); setCustomPorts(''); setErrorMsg(null);
     setSelected(new Set(DEFAULT_PORTS));
   }
+
+  function validateHostInput(host) {
+    const trimmed = (host || '').trim();
+    if (!trimmed) return 'Please enter a hostname or IP address.';
+    if (trimmed.length > 253) return 'Hostname is too long (max 253 characters).';
+    if (!/^[a-zA-Z0-9._:\-]+$/.test(trimmed)) return `"${trimmed}" is not a valid hostname or IP address.`;
+    return null;
+  }
+
 
   const sortedResults = [...results].sort((a, b) => a.port - b.port);
   const openPorts     = results.filter(r => r.status === 'open');
@@ -289,6 +305,13 @@ export default function PortScanner() {
         </div>
       </div>
 
+      {errorMsg && (
+        <div style={s.errorBanner}>
+          <span style={s.errorBannerIcon}>⚠</span>
+          <span style={s.errorBannerMsg}>{errorMsg}</span>
+          <button style={s.errorBannerClose} onClick={() => setErrorMsg(null)}>✕</button>
+        </div>
+      )}
       {/* Export and Clear */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <ExportBar
@@ -425,6 +448,10 @@ const s = {
   statusBadge: { padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500, border: '1px solid', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' },
 
   placeholder: { textAlign: 'center', color: '#3D4D65', padding: '60px 0', fontFamily: 'JetBrains Mono, monospace', fontSize: 12 },
+  errorBanner: { display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.3)', borderRadius:8, animation:'fadeIn 0.2s ease' },
+  errorBannerIcon: { fontSize:16, color:'#FF4B6A', flexShrink:0 },
+  errorBannerMsg: { flex:1, fontSize:12, color:'#FF4B6A', fontFamily:'JetBrains Mono, monospace' },
+  errorBannerClose: { background:'transparent', border:'none', color:'#FF4B6A', cursor:'pointer', fontSize:14, padding:'0 4px', fontFamily:'Inter, sans-serif' },
   clearBtn: {
     background: 'rgba(255,75,106,0.08)', border: '1px solid rgba(255,75,106,0.25)',
     color: '#FF4B6A', borderRadius: 6, padding: '6px 14px',

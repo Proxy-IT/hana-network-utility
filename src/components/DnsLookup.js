@@ -99,8 +99,18 @@ export default function DnsLookup() {
     setHost('');
   }
 
+  function validateDnsHost(host) {
+    const trimmed = (host || '').trim();
+    if (!trimmed) return 'Please enter a hostname or IP address.';
+    if (trimmed.length > 253) return 'Hostname is too long (max 253 characters).';
+    if (!/^[a-zA-Z0-9._:-]+$/.test(trimmed)) return '"' + trimmed + '" is not a valid hostname or IP address.';
+    return null;
+  }
+
   async function runLookup() {
     if (!host.trim()) return;
+    const ve = validateDnsHost(host);
+    if (ve) { setErrors([{ type: 'ERROR', message: ve }]); setQueried({ host, type: recordType, server: effectiveServer }); setRunning(false); return; }
     setRunning(true); setResults([]); setErrors([]);
     setQueried({ host: host.trim(), type: recordType, server: effectiveServer });
 
@@ -121,6 +131,8 @@ export default function DnsLookup() {
       setErrors(res.errors   || []);
     } catch (e) {
       setErrors([{ type: 'ERROR', message: e.message }]);
+      setRunning(false);
+      return;
     }
     setRunning(false);
   }
@@ -309,5 +321,9 @@ const s = {
   errorType: { fontSize: 10, fontWeight: 600, color: '#3D4D65', fontFamily: 'JetBrains Mono, monospace', width: 50 },
   errorMsg: { fontSize: 11, color: '#3D4D65', fontFamily: 'JetBrains Mono, monospace' },
   placeholder: { textAlign: 'center', color: '#3D4D65', padding: '60px 0', fontFamily: 'JetBrains Mono, monospace', fontSize: 12 },
+  errorBanner: { display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.3)', borderRadius:8, animation:'fadeIn 0.2s ease' },
+  errorBannerIcon: { fontSize:16, color:'#FF4B6A', flexShrink:0 },
+  errorBannerMsg: { flex:1, fontSize:12, color:'#FF4B6A', fontFamily:'JetBrains Mono, monospace' },
+  errorBannerClose: { background:'transparent', border:'none', color:'#FF4B6A', cursor:'pointer', fontSize:14, padding:'0 4px', fontFamily:'Inter, sans-serif' },
   clearBtn: { background:'rgba(255,75,106,0.08)', border:'1px solid rgba(255,75,106,0.25)', color:'#FF4B6A', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:'Inter, sans-serif', whiteSpace:'nowrap' },
 };

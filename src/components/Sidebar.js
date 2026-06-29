@@ -85,7 +85,7 @@ export default function Sidebar({ active, onSelect, sysInfo }) {
         )}
         <div style={s.versionRow}>
           <span style={s.versionName}>Hana</span>
-          <span style={s.versionNum}>v1.6.5</span>
+          <span style={s.versionNum}>v1.7.0</span>
         </div>
       </div>
     </aside>

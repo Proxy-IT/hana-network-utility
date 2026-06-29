@@ -144,16 +144,47 @@ export default function MultiPing({ state, setState }) {
     window.electronAPI.stopMultiPing({ slotId: id });
   }
 
+  // ── Host validator ───────────────────────────────────────────────────────
+  function isValidHostMulti(host) {
+    const trimmed = (host || '').trim();
+    if (!trimmed) return false;
+    if (trimmed.length > 253) return false;
+    return /^[a-zA-Z0-9._:\-]+$/.test(trimmed);
+  }
+
   // ── Start / stop all ─────────────────────────────────────────────────────
   function startAll() {
     const activeSlots = slots.filter(s => s.host.trim());
     if (activeSlots.length === 0) return;
 
-    setResults({});
+    // Pre-validate all hosts — mark invalid ones as error immediately
+    const invalidSlots = activeSlots.filter(s => !isValidHostMulti(s.host));
+    const validSlots   = activeSlots.filter(s => isValidHostMulti(s.host));
+
+    // Seed error state for invalid hosts right away
+    if (invalidSlots.length > 0) {
+      const errorSeeds = {};
+      invalidSlots.forEach(s => {
+        errorSeeds[s.id] = {
+          history: [], sent: 0, lost: 0, lastSeen: null, consecutiveLost: 0,
+          status: 'error',
+          errorMessage: '"' + s.host.trim() + '" is not a valid hostname or IP address.',
+        };
+      });
+      setResults(prev => ({ ...prev, ...errorSeeds }));
+    }
+
+    if (validSlots.length === 0) return; // nothing valid to start
+
+    setResults(prev => {
+      const clean = {};
+      validSlots.forEach(s => { clean[s.id] = undefined; });
+      return { ...prev, ...clean };
+    });
     setRunning(true);
 
     if (isBrowser) {
-      activeSlots.forEach(s => {
+      validSlots.forEach(s => {
         setTimeout(() => startHost(s.id, s.host), Math.random() * 300);
       });
       return;
@@ -164,8 +195,19 @@ export default function MultiPing({ state, setState }) {
     window.electronAPI.onMultiPingResult(({ slotId, rtt, timeout, unreachable }) => {
       addResult(slotId, { rtt: rtt ?? null, timeout: !!timeout || !!unreachable });
     });
+    window.electronAPI.onMultiPingError?.(({ slotId, message }) => {
+      // Mark slot as error state without crashing the whole component
+      setResults(prev => ({
+        ...prev,
+        [slotId]: {
+          ...(prev[slotId] || { history: [], sent: 0, lost: 0, lastSeen: null, consecutiveLost: 0 }),
+          status: 'error',
+          errorMessage: message,
+        }
+      }));
+    });
 
-    activeSlots.forEach(s => startHost(s.id, s.host));
+    validSlots.forEach(s => startHost(s.id, s.host));
   }
 
   function stopAll(silent = false) {
@@ -274,6 +316,24 @@ function HostCard({ host, data, running }) {
         <div style={s.cardHost}>{host}</div>
         <div style={s.cardWaitLabel}>
           <span style={s.waitSpinner} /> Waiting…
+        </div>
+      </div>
+    );
+  }
+
+  // Error state — invalid host or backend rejection
+  if (data.status === 'error') {
+    return (
+      <div style={{ ...s.card, border: '1px solid rgba(255,75,106,0.3)', background: 'rgba(255,75,106,0.04)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+          <div style={{ ...s.cardHost, color:'#FF4B6A' }}>{host}</div>
+          <span style={{ fontSize:11, fontWeight:600, color:'#FF4B6A', letterSpacing:'0.05em' }}>INVALID HOST</span>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:16, color:'#FF4B6A' }}>⚠</span>
+          <span style={{ fontSize:11, color:'#FF4B6A', fontFamily:'JetBrains Mono, monospace', lineHeight:1.5 }}>
+            {data.errorMessage || 'Invalid hostname or IP address.'}
+          </span>
         </div>
       </div>
     );

@@ -51,7 +51,7 @@ export default function Disclaimer({ onAccept }) {
         {/* Title */}
         <div style={s.titleWrap}>
           <h1 style={s.title}>Hana</h1>
-          <p style={s.subtitle}>Network Utility · v1.6.5</p>
+          <p style={s.subtitle}>Network Utility · v1.7.0</p>
         </div>
 
         {/* Disclaimer text */}

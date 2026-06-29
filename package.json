@@ -1,6 +1,6 @@
 {
   "name": "hana-network-utility",
-  "version": "1.6.5",
+  "version": "1.7.0",
   "description": "Hana - Network Utility",
   "author": "Your Name",
   "main": "electron/main.js",
@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
-    "electron": "^33.0.0",
+    "electron": "^42.0.0",
     "electron-builder": "^25.0.0",
     "wait-on": "^7.2.0",
     "cross-env": "^7.0.3"
@@ -88,5 +88,8 @@
     "development": [
       "last 1 chrome version"
     ]
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
