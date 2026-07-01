@@ -22,7 +22,7 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../build/index.html'));
   }
-  // Allow HTTP requests to ip-api.com and other API endpoints
+  // Content Security Policy — allows the API endpoints Hana calls
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -406,8 +406,26 @@ const VALID_DNS_TYPES = new Set(['A','AAAA','CNAME','MX','TXT','NS','PTR','ALL']
 
 // ── OPEN EXTERNAL LINKS ──────────────────────────────────────────────────────
 ipcMain.on('open-external', (event, url) => {
-  shell.openExternal(url);
+  // Only allow http(s) URLs — never file://, smb://, or other protocol handlers.
+  // This prevents a compromised renderer from invoking arbitrary OS protocol
+  // handlers via shell.openExternal.
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      shell.openExternal(url);
+    }
+  } catch {
+    // Malformed URL — ignore silently
+  }
 });
+
+// ── SYSTEM INFO ───────────────────────────────────────────────────────────────
+// Provides hostname and platform for the sidebar footer display.
+ipcMain.handle('get-system-info', async () => ({
+  platform: process.platform,
+  hostname: os.hostname(),
+  networkInterfaces: os.networkInterfaces(),
+}));
 
 // ── DNS LOOKUP ───────────────────────────────────────────────────────────────
 ipcMain.handle('dns-lookup', async (event, { host, type, server }) => {
@@ -668,9 +686,3 @@ ipcMain.on('subnet-sweep-list-start', (event, { ips }) => {
   }
 });
 
-// ── SYSTEM INFO ───────────────────────────────────────────────────────────────
-ipcMain.handle('get-system-info', async () => ({
-  platform: process.platform,
-  hostname: os.hostname(),
-  networkInterfaces: os.networkInterfaces(),
-}));

@@ -160,6 +160,32 @@ thousands of entries.
 
 ---
 
+## v1.7.2 — July 2026
+
+### New
+
+**In-app feedback channel**
+The About page now has dedicated "Report a Bug" and "Request a Feature"
+buttons. These open pre-filled GitHub issue templates with the app version
+and operating system automatically attached, so reports arrive with the
+environment details already included. Structured issue templates were added
+for consistent, useful bug reports and feature requests.
+
+### Security
+
+- Hardened the `open-external` IPC handler with an http(s) protocol allowlist.
+  Previously it passed any URL straight to `shell.openExternal`, which could
+  invoke arbitrary OS protocol handlers (file://, smb://, etc.). Now only
+  http and https URLs are opened.
+
+### Cleanup
+
+- Removed a stale duplicate CSS property in the About page link styling.
+- Removed the leftover decorative emoji from the About footer.
+- Single-sourced the version number within the About component.
+
+---
+
 ## v1.7.1 — June 2026
 
 ### Bug Fixes

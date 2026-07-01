@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Hana Website
+    url: https://hana.proxy-it.co
+    about: Learn more about Hana, see screenshots, and download the latest release.
+  - name: Proxy-IT
+    url: https://proxy-it.co
+    about: The IT consulting firm behind Hana.

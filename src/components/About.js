@@ -1,5 +1,8 @@
 import React from 'react';
 
+// Single source of version within this component — update once per release
+const APP_VERSION = '1.7.2';
+
 const MODULES = [
   { icon: '◎', name: 'Ping',          desc: 'Fixed and continuous ping with live RTT graph and packet loss tracking' },
   { icon: '⊛', name: 'Multi-Ping',    desc: 'Monitor up to 5 hosts simultaneously — green when up, red when down' },
@@ -15,7 +18,7 @@ const MODULES = [
 const LINKS = [
   { label: 'GitHub Repository', url: 'https://github.com/Proxy-IT/hana-network-utility' },
   { label: 'Latest Release',    url: 'https://github.com/Proxy-IT/hana-network-utility/releases/latest' },
-  { label: 'Report a Bug',      url: 'https://github.com/Proxy-IT/hana-network-utility/issues' },
+  { label: 'Hana Website',      url: 'https://hana.proxy-it.co' },
   { label: 'Terms of Use',      url: 'https://github.com/Proxy-IT/hana-network-utility/blob/main/TERMS.md' },
   { label: 'Privacy Policy',    url: 'https://github.com/Proxy-IT/hana-network-utility/blob/main/PRIVACY.md' },
 ];
@@ -26,6 +29,30 @@ function openLink(url) {
   } else {
     window.open(url, '_blank');
   }
+}
+
+const REPO = 'https://github.com/Proxy-IT/hana-network-utility';
+
+// Build a pre-filled GitHub issue URL using YAML issue-form field parameters.
+// Issue forms let each field be populated by its `id` as a URL parameter, which
+// avoids the template-vs-body conflict that plain markdown templates have.
+// The `version` and `os` field ids match those defined in the .yml issue forms.
+function buildIssueUrl(templateFile, fields) {
+  const params = new URLSearchParams({ template: templateFile, ...fields });
+  return `${REPO}/issues/new?${params.toString()}`;
+}
+
+function reportBug() {
+  openLink(buildIssueUrl('bug_report.yml', {
+    version: APP_VERSION,
+    os:      getPlatform(),
+  }));
+}
+
+function requestFeature() {
+  openLink(buildIssueUrl('feature_request.yml', {
+    version: APP_VERSION,
+  }));
 }
 
 export default function About() {
@@ -46,7 +73,7 @@ export default function About() {
         <div style={s.heroText}>
           <h1 style={s.heroTitle}>Hana</h1>
           <p style={s.heroSub}>Network Utility</p>
-          <div style={s.versionBadge}>v1.7.1</div>
+          <div style={s.versionBadge}>v{APP_VERSION}</div>
         </div>
       </div>
 
@@ -72,6 +99,27 @@ export default function About() {
         </div>
       </div>
 
+      {/* Feedback */}
+      <div style={s.section}>
+        <div style={s.sectionLabel}>FEEDBACK</div>
+        <div style={s.feedbackRow}>
+          <button style={s.feedbackBtn} onClick={reportBug}>
+            <span style={s.feedbackIcon}>🐛</span>
+            <div style={s.feedbackText}>
+              <span style={s.feedbackTitle}>Report a Bug</span>
+              <span style={s.feedbackSub}>Something not working? Let us know.</span>
+            </div>
+          </button>
+          <button style={s.feedbackBtn} onClick={requestFeature}>
+            <span style={s.feedbackIcon}>💡</span>
+            <div style={s.feedbackText}>
+              <span style={s.feedbackTitle}>Request a Feature</span>
+              <span style={s.feedbackSub}>Have an idea? We'd love to hear it.</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* Two column — Links + Details */}
       <div style={s.twoCol}>
 
@@ -92,7 +140,7 @@ export default function About() {
         <div style={s.section}>
           <div style={s.sectionLabel}>DETAILS</div>
           <div style={s.detailCard}>
-            <DetailRow label="Version"   value="1.7.1" />
+            <DetailRow label="Version"   value={APP_VERSION} />
             <DetailRow label="Platform"  value={getPlatform()} />
             <DetailRow label="License"   value="GPL v3.0" />
             <DetailRow label="Author"    value="Proxy-IT" />
@@ -115,8 +163,7 @@ export default function About() {
 
       {/* Footer */}
       <div style={s.footer}>
-        <span>Built with care. Named with meaning.</span>
-        <span style={s.footerFlower}>🌸</span>
+        <span>A free tool by Proxy-IT LLC</span>
       </div>
 
     </div>
@@ -210,7 +257,7 @@ const s = {
   },
   linkRow: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '10px 16px', borderBottom: '1px solid rgba(30,45,69,0.5)',
+    padding: '10px 16px',
     background: 'transparent', border: 'none',
     borderBottom: '1px solid rgba(30,45,69,0.5)',
     cursor: 'pointer', width: '100%', textAlign: 'left',
@@ -243,5 +290,18 @@ const s = {
     gap: 8, fontSize: 11, color: '#3D4D65', fontStyle: 'italic',
     paddingTop: 4,
   },
-  footerFlower: { fontSize: 14 },
+
+  feedbackRow: { display: 'flex', gap: 12 },
+  feedbackBtn: {
+    display: 'flex', alignItems: 'center', gap: 14, flex: 1,
+    padding: '14px 18px', textAlign: 'left',
+    background: '#111827', border: '1px solid #1E2D45',
+    borderRadius: 8, cursor: 'pointer',
+    fontFamily: 'Inter, sans-serif',
+    transition: 'border-color 0.15s, background 0.15s',
+  },
+  feedbackIcon: { fontSize: 22, flexShrink: 0 },
+  feedbackText: { display: 'flex', flexDirection: 'column', gap: 2 },
+  feedbackTitle: { fontSize: 13, fontWeight: 600, color: '#E8EDF5' },
+  feedbackSub: { fontSize: 11, color: '#8892A4' },
 };

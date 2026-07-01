@@ -1,0 +1,75 @@
+name: Bug Report
+description: Report a problem with Hana
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more detail you provide, the faster we can fix it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you see?
+      placeholder: When I clicked Start Sweep, ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: I expected the scan to ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Open the ... module
+        2. Enter ...
+        3. Click ...
+    validations:
+      required: false
+  - type: dropdown
+    id: module
+    attributes:
+      label: Which module?
+      options:
+        - Ping
+        - Multi-Ping
+        - Traceroute
+        - Subnet Sweep
+        - Subnet Calc
+        - IP Info
+        - DNS Lookup
+        - Port Scanner
+        - Latency Guide
+        - Other / Not sure
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Hana version
+      description: Auto-filled if you opened this from the app's About page.
+      placeholder: e.g. 1.7.2
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Auto-filled if you opened this from the app's About page.
+      placeholder: e.g. Windows, macOS
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Screenshots, error messages, or anything else that helps.
+    validations:
+      required: false

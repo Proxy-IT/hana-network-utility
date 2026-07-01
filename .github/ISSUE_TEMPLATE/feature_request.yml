@@ -1,0 +1,47 @@
+name: Feature Request
+description: Suggest an idea or improvement for Hana
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Good ideas make Hana better for everyone.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What are you trying to do that Hana doesn't currently support?
+      placeholder: When I'm troubleshooting ..., I can't ...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like Hana to do?
+      placeholder: It would help if Hana could ...
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: How would you use it?
+      description: A concrete example of your workflow helps us understand the value.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Hana version
+      description: Auto-filled if you opened this from the app's About page.
+      placeholder: e.g. 1.7.2
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Mockups, links to similar tools, or anything else.
+    validations:
+      required: false
