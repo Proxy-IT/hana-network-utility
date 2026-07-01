@@ -80,6 +80,11 @@ jobs:
           # Clean up the .p12 — it's now inside the keychain, no need to keep it on disk
           rm certificate.p12
 
+      - name: Verify the signing identity was imported correctly
+        run: |
+          echo "Available code signing identities in the keychain:"
+          security find-identity -v -p codesigning build.keychain
+
       - name: Build, sign, and notarize Mac installer
         run: npm run build
         env:
@@ -88,7 +93,11 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID:                ${{ secrets.APPLE_TEAM_ID }}
           # electron-builder reads these two to know notarization is requested
-          CSC_LINK:                     ''   # not used — cert is already in the keychain
+          # CSC_LINK is deliberately NOT set — the certificate is already
+          # imported into the CI keychain in the previous step. Setting
+          # CSC_LINK to anything (even an empty string) makes electron-builder
+          # try to resolve it as a file path, which fails. CSC_IDENTITY_AUTO_DISCOVERY
+          # tells it to instead look for a matching identity in the keychain.
           CSC_IDENTITY_AUTO_DISCOVERY:  'true'
 
       - name: Clean up temporary keychain
