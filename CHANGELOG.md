@@ -171,6 +171,14 @@ and operating system automatically attached, so reports arrive with the
 environment details already included. Structured issue templates were added
 for consistent, useful bug reports and feature requests.
 
+### Fixed
+
+- Wired up the error-banner IPC channels for Continuous Ping, Multi-Ping, and
+  Traceroute. The main process was sending validation errors on these channels
+  but the preload bridge did not relay them, so the error banners never showed.
+  Client-side validation already caught most cases, but the backend error path
+  is now fully connected as a backstop.
+
 ### Security
 
 - Hardened the `open-external` IPC handler with an http(s) protocol allowlist.

@@ -39,8 +39,8 @@ jobs:
           path: dist/*.exe
           retention-days: 5
 
-  # ── Build Mac arm64 (Apple Silicon) ────────────────────────────────────────
-  build-mac-arm64:
+  # ── Build & sign Mac installer ───────────────────────────────────────────────
+  build-mac:
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -55,49 +55,56 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Mac arm64 installer
-        run: npx electron-builder --mac --arm64
+      - name: Import signing certificate into a temporary keychain
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE_BASE64:   ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Decode the base64 certificate to a .p12 file
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
 
-      - name: Upload Mac arm64 artifact
+          # Create a temporary, throwaway keychain for this CI run only.
+          # Using a random password since it only needs to exist for this job.
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          # Import the certificate + private key
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+
+          # Allow codesign to access the imported key without a GUI prompt
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          # Clean up the .p12 — it's now inside the keychain, no need to keep it on disk
+          rm certificate.p12
+
+      - name: Build, sign, and notarize Mac installer
+        run: npm run build
+        env:
+          GH_TOKEN:                    ${{ secrets.GITHUB_TOKEN }}
+          APPLE_ID:                    ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID:                ${{ secrets.APPLE_TEAM_ID }}
+          # electron-builder reads these two to know notarization is requested
+          CSC_LINK:                     ''   # not used — cert is already in the keychain
+          CSC_IDENTITY_AUTO_DISCOVERY:  'true'
+
+      - name: Clean up temporary keychain
+        if: always()
+        run: security delete-keychain build.keychain || true
+
+      - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mac-installer-arm64
-          path: dist/*arm64*.dmg
-          retention-days: 5
-
-  # ── Build Mac x64 (Intel) ───────────────────────────────────────────────────
-  build-mac-x64:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Mac x64 installer
-        run: npx electron-builder --mac --x64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Mac x64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-installer-x64
+          name: mac-installer
           path: dist/*.dmg
           retention-days: 5
 
-  # ── Create GitHub Release with all installers ───────────────────────────────
+  # ── Create GitHub Release ───────────────────────────────────────────────────
   release:
-    needs: [build-windows, build-mac-arm64, build-mac-x64]
+    needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -113,17 +120,11 @@ jobs:
           name: windows-installer
           path: dist/windows
 
-      - name: Download Mac arm64 artifact
+      - name: Download Mac artifact
         uses: actions/download-artifact@v4
         with:
-          name: mac-installer-arm64
-          path: dist/mac-arm64
-
-      - name: Download Mac x64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mac-installer-x64
-          path: dist/mac-x64
+          name: mac-installer
+          path: dist/mac
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -135,26 +136,19 @@ jobs:
             ### Downloads
 
             **Windows**
-            - Download the `.exe` file and run the installer
+            - Download the `.exe` file below and run the installer
             - SmartScreen may show a warning — click **More info → Run anyway**
 
-            **Mac — Apple Silicon (M1/M2/M3/M4)**
-            - Download the `arm64.dmg` file
-            - Open it and drag Hana to Applications
-            - Right-click the app → Open on first launch to bypass Gatekeeper
-
-            **Mac — Intel**
-            - Download the standard `.dmg` file
-            - Open it and drag Hana to Applications
-            - Right-click the app → Open on first launch to bypass Gatekeeper
+            **Mac**
+            - Download the `.dmg` file below
+            - Signed and notarized by Apple — opens normally, no Gatekeeper warning
 
             ---
             No telemetry. No ads. No data collection.
             See [CHANGELOG.md](CHANGELOG.md) for full patch notes.
           files: |
             dist/windows/*.exe
-            dist/mac-arm64/*.dmg
-            dist/mac-x64/*.dmg
+            dist/mac/*.dmg
           draft: false
           prerelease: false
         env:

@@ -18,9 +18,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopContinuousPing:            ()     => ipcRenderer.send('ping-continuous-stop'),
   onContinuousPingResult:        (cb)   => ipcRenderer.on('ping-continuous-result',  (_, d) => cb(d)),
   onContinuousPingStopped:       (cb)   => ipcRenderer.on('ping-continuous-stopped', ()     => cb()),
+  onContinuousPingError:         (cb)   => ipcRenderer.on('ping-continuous-error',   (_, d) => cb(d)),
   removeContinuousPingListeners: ()     => {
     ipcRenderer.removeAllListeners('ping-continuous-result');
     ipcRenderer.removeAllListeners('ping-continuous-stopped');
+    ipcRenderer.removeAllListeners('ping-continuous-error');
   },
 
   // Multi-ping (multiple independent hosts)
@@ -28,19 +30,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopMultiPing:   (opts) => ipcRenderer.send('multi-ping-stop',  opts),
   onMultiPingResult:  (cb) => ipcRenderer.on('multi-ping-result',  (_, d) => cb(d)),
   onMultiPingStopped: (cb) => ipcRenderer.on('multi-ping-stopped', (_, d) => cb(d)),
+  onMultiPingError:   (cb) => ipcRenderer.on('multi-ping-error',   (_, d) => cb(d)),
   removeMultiPingListeners: () => {
     ipcRenderer.removeAllListeners('multi-ping-result');
     ipcRenderer.removeAllListeners('multi-ping-stopped');
+    ipcRenderer.removeAllListeners('multi-ping-error');
   },
 
   // Traceroute
   startTraceroute:           (opts) => ipcRenderer.send('traceroute-start', opts),
   stopTraceroute:            ()     => ipcRenderer.send('traceroute-stop'),
-  onTracerouteData:          (cb)   => ipcRenderer.on('traceroute-data', (_, d) => cb(d)),
-  onTracerouteDone:          (cb)   => ipcRenderer.on('traceroute-done', (_, d) => cb(d)),
+  onTracerouteData:          (cb)   => ipcRenderer.on('traceroute-data',  (_, d) => cb(d)),
+  onTracerouteDone:          (cb)   => ipcRenderer.on('traceroute-done',  (_, d) => cb(d)),
+  onTracerouteError:         (cb)   => ipcRenderer.on('traceroute-error', (_, d) => cb(d)),
   removeTracerouteListeners: ()     => {
     ipcRenderer.removeAllListeners('traceroute-data');
     ipcRenderer.removeAllListeners('traceroute-done');
+    ipcRenderer.removeAllListeners('traceroute-error');
   },
 
   // Subnet sweep

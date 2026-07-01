@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Hana - Network Utility — macOS entitlements
+
+    These are required because Hana's hardened runtime (mandatory for
+    notarization) locks down the app by default. Each entitlement below
+    re-enables something Hana specifically needs.
+  -->
+
+  <!-- Electron's renderer process uses JIT compilation for JavaScript -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- Required for Electron's V8 JIT and some native module loading -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <!-- Allows loading dynamic libraries that aren't signed by the same
+       Team ID — needed for some Electron/Node native dependencies -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- Network access — required for IP Info, DNS Lookup, WhoIs lookups -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- Hana's diagnostic modules (ping, traceroute, port scanner) need to
+       open raw sockets and spawn child processes (ping, tracert, etc.) -->
+  <key>com.apple.security.network.server</key>
+  <true/>
+
+</dict>
+</plist>
