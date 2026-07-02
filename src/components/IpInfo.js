@@ -62,24 +62,28 @@ async function fetchPublicIp() {
 }
 
 async function fetchIpDetails(ip) {
-  // ip-api.com — reliable, no API key, works in packaged Electron apps
-  const data = await apiFetch(`http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`);
-  if (data.status === 'fail') throw new Error(data.message || 'IP lookup failed');
+  // ipinfo.io — HTTPS, no API key required for basic lookups, works in packaged Electron apps.
+  // Replaces the old http://ip-api.com endpoint, which the tightened production CSP no longer allows.
+  const data = await apiFetch(`https://ipinfo.io/${ip}/json`);
+  if (data.error) throw new Error(data.error.message || 'IP lookup failed');
+  const [latitude, longitude] = (data.loc || '').split(',');
+  // ipinfo combines ASN + org name into one field, e.g. "AS15169 Google LLC"
+  const orgMatch = /^(AS\d+)\s+(.*)$/.exec(data.org || '');
   return {
-    ip:          data.query,
+    ip:          data.ip,
     city:        data.city,
-    region:      data.regionName,
-    regionCode:  data.region,
-    country:     data.country,
-    countryCode: data.countryCode,
-    postal:      data.zip,
-    latitude:    data.lat,
-    longitude:   data.lon,
+    region:      data.region,
+    regionCode:  null, // not provided by ipinfo's free tier
+    country:     data.country,     // ipinfo only provides the 2-letter code, not the full name
+    countryCode: data.country,
+    postal:      data.postal,
+    latitude:    latitude || null,
+    longitude:   longitude || null,
     timezone:    data.timezone,
     utcOffset:   null,
-    isp:         data.isp,
-    asn:         data.as,
-    org:         data.org,
+    isp:         orgMatch ? orgMatch[2] : data.org,
+    asn:         orgMatch ? orgMatch[1] : null,
+    org:         orgMatch ? orgMatch[2] : data.org,
   };
 }
 
@@ -208,8 +212,8 @@ export default function IpInfo() {
               <div style={s.detailGrid}>
                 <DetailRow label="ISP / Org"   value={myIp.isp} />
                 <DetailRow label="ASN"         value={myIp.asn} />
-                <DetailRow label="Country"     value={`${myIp.country} (${myIp.countryCode})`} />
-                <DetailRow label="Region"      value={`${myIp.region} (${myIp.regionCode})`} />
+                <DetailRow label="Country"     value={myIp.country} />
+                <DetailRow label="Region"      value={myIp.regionCode ? `${myIp.region} (${myIp.regionCode})` : myIp.region} />
                 <DetailRow label="City"        value={myIp.city} />
                 <DetailRow label="Postal"      value={myIp.postal} />
                 <DetailRow label="Timezone"    value={myIp.timezone} />
@@ -257,8 +261,8 @@ export default function IpInfo() {
               <div style={s.detailGrid}>
                 <DetailRow label="ISP / Org"   value={lookupResult.isp} />
                 <DetailRow label="ASN"         value={lookupResult.asn} />
-                <DetailRow label="Country"     value={`${lookupResult.country} (${lookupResult.countryCode})`} />
-                <DetailRow label="Region"      value={`${lookupResult.region} (${lookupResult.regionCode})`} />
+                <DetailRow label="Country"     value={lookupResult.country} />
+                <DetailRow label="Region"      value={lookupResult.regionCode ? `${lookupResult.region} (${lookupResult.regionCode})` : lookupResult.region} />
                 <DetailRow label="City"        value={lookupResult.city} />
                 <DetailRow label="Postal"      value={lookupResult.postal} />
                 <DetailRow label="Timezone"    value={lookupResult.timezone} />

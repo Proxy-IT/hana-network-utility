@@ -1,29 +1,34 @@
 {
   "name": "hana-network-utility",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "description": "Hana - Network Utility",
   "author": "Your Name",
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
-    "start": "concurrently -k \"npm run react-start\" \"npm run electron-start\"",
-    "react-start": "cross-env BROWSER=none react-scripts start",
-    "react-build": "react-scripts build",
-    "build": "npm run react-build && electron-builder",
-    "electron": "electron .",
-    "electron-start": "node ./start-electron.js"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1"
+    "start": "concurrently -k \"npm run dev\" \"npm run electron-start\"",
+    "dev": "vite",
+    "electron-start": "node ./start-electron.js",
+    "build": "vite build && electron-builder",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check:ipc": "node scripts/check-ipc-contract.js",
+    "preflight": "npm run check:ipc && npm run test",
+    "audit:before": "npm audit > audit-before.txt 2>&1",
+    "audit:after": "npm audit > audit-after.txt 2>&1",
+    "audit:prod": "npm audit --omit=dev"
   },
   "devDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^8.2.0",
     "electron": "^42.0.0",
     "electron-builder": "^25.0.0",
-    "wait-on": "^7.2.0",
-    "cross-env": "^7.0.3"
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0"
   },
   "build": {
     "appId": "com.hana.networkutility",
@@ -31,7 +36,6 @@
     "files": [
       "build/**/*",
       "electron/**/*",
-      "node_modules/**/*",
       "package.json"
     ],
     "extraMetadata": {
@@ -41,7 +45,8 @@
       "output": "dist"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "Hana-NetworkUtility-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -62,7 +67,8 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build-resources/entitlements.mac.plist",
-      "entitlementsInherit": "build-resources/entitlements.mac.plist"
+      "entitlementsInherit": "build-resources/entitlements.mac.plist",
+      "artifactName": "Hana-NetworkUtility-${version}-${arch}.${ext}"
     },
     "dmg": {
       "contents": [
@@ -83,17 +89,7 @@
       }
     }
   },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version"
-    ]
-  },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   }
 }

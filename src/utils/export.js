@@ -156,12 +156,15 @@ export function exportTraceCsv({ host, hops }) {
 
 // ── SUBNET SWEEP exports ──────────────────────────────────────────────────────
 
-export function exportSweepTxt({ baseIp, start, end, cidr, mode, results }) {
+// Pure string-builder, extracted from exportSweepTxt so it can be unit tested
+// without needing browser download APIs (Blob, URL.createObjectURL) that don't
+// exist in a Node test environment. This is what src/lib/__tests__/exportFormat.test.js
+// actually imports and tests — no more reimplementing the logic inside the test file.
+export function buildSweepReport({ baseIp, start, end, cidr, mode, results }) {
   const ts    = new Date().toLocaleString();
   const alive = results.filter(r => r.alive);
   const dead  = results.filter(r => !r.alive);
 
-  // Build range display based on mode
   const sortedIps = [...results].sort((a, b) => {
     const aParts = a.ip.split('.').map(Number);
     const bParts = b.ip.split('.').map(Number);
@@ -195,10 +198,15 @@ export function exportSweepTxt({ baseIp, start, end, cidr, mode, results }) {
     ...dead.map(r => `  ${r.ip}`),
   ];
 
+  return lines.join('\n');
+}
+
+export function exportSweepTxt({ baseIp, start, end, cidr, mode, results }) {
+  const text = buildSweepReport({ baseIp, start, end, cidr, mode, results });
   const filename = mode === 'cidr'
     ? `sweep_${cidr.replace('/', '-')}_${timestamp()}.txt`
     : `sweep_${baseIp}_${timestamp()}.txt`;
-  downloadFile(filename, lines.join('\n'));
+  downloadFile(filename, text);
 }
 
 export function exportSweepCsv({ baseIp, start, end, cidr, mode, results }) {

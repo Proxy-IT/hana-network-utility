@@ -1,7 +1,10 @@
 import React from 'react';
 
-// Single source of version within this component — update once per release
-const APP_VERSION = '1.7.2';
+// Single source of truth: injected at build time by vite.config.mjs's
+// `define` config, which reads the version from package.json. This
+// eliminates the class of bug where one of several hardcoded version
+// strings gets missed on a release (has happened twice already).
+const APP_VERSION = __APP_VERSION__;
 
 const MODULES = [
   { icon: '◎', name: 'Ping',          desc: 'Fixed and continuous ping with live RTT graph and packet loss tracking' },

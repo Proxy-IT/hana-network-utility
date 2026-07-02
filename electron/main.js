@@ -18,22 +18,67 @@ function createWindow() {
   });
   const isDev = !app.isPackaged;
   if (isDev) {
-    win.loadURL('http://localhost:3000');
+    win.loadURL('http://localhost:5173');
   } else {
     win.loadFile(path.join(__dirname, '../build/index.html'));
   }
-  // Content Security Policy — allows the API endpoints Hana calls
+
+  // ── Content Security Policy ─────────────────────────────────────────────────
+  // Production CSP is locked to the exact domains Hana calls (verified by a
+  // fresh grep of every fetch() in src/ as of this migration — see the v1.8.0
+  // migration notes for the scan). No 'unsafe-eval', no wildcard connect-src.
+  //
+  // Development CSP is slightly looser: it needs 'unsafe-eval' and a websocket
+  // connection for Vite's dev server / HMR, neither of which exist in the
+  // packaged app.
+  //
+  // NOTE: 'unsafe-inline' remains in style-src because every Hana component
+  // uses React inline style objects (style={s.xxx}) throughout, which the
+  // browser treats as inline styles requiring this directive. Removing it
+  // requires a full CSS-modules refactor, which is intentionally scoped out
+  // of this migration — it's a separate, larger project (see engineering
+  // backlog: CSP Hardening Phase 2).
+  const isProd = app.isPackaged;
+
+  const ALLOWED_CONNECT = [
+    "'self'",
+    "https://ipinfo.io",             // IP Info — geolocation (HTTPS; replaces the old http://ip-api.com)
+    "https://api.ipify.org",         // IP Info — public IP detection
+    "https://rdap.org",              // IP Info — WhoIs / RDAP (domain + IP lookups)
+    "https://api.whois.vu",          // IP Info — raw WhoIs fallback
+    "https://fonts.googleapis.com",  // Google Fonts stylesheet
+    "https://fonts.gstatic.com",     // Google Fonts font files
+  ].join(' ');
+
+  const CSP_PROD = [
+    "default-src 'none'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    `connect-src ${ALLOWED_CONNECT}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+
+  const CSP_DEV = [
+    "default-src 'none'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",   // eval needed for Vite HMR
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    `connect-src 'self' ws://localhost:5173 ${ALLOWED_CONNECT}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-          "font-src 'self' https://fonts.gstatic.com; " +
-          "connect-src 'self' https: http://ip-api.com https://api.ipify.org https://rdap.org https://api.whois.vu;"
-        ],
+        'Content-Security-Policy': [ isProd ? CSP_PROD : CSP_DEV ],
       },
     });
   });

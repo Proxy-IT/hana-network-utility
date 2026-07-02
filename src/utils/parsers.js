@@ -1,35 +1,11 @@
-// Parse ping output from macOS/Linux and Windows into structured data
-
-export function parsePingOutput(raw, platform = 'darwin') {
-  const lines = raw.split('\n').filter(Boolean);
-  const rtts = [];
-
-  for (const line of lines) {
-    // macOS/Linux: "64 bytes from 8.8.8.8: icmp_seq=1 ttl=118 time=12.3 ms"
-    const unixMatch = line.match(/time[<=]([\d.]+)\s*ms/i);
-    if (unixMatch) {
-      rtts.push(parseFloat(unixMatch[1]));
-      continue;
-    }
-    // Windows: "Reply from 8.8.8.8: bytes=32 time=12ms TTL=118"
-    const winMatch = line.match(/time[<=]([\d.]+)ms/i);
-    if (winMatch) {
-      rtts.push(parseFloat(winMatch[1]));
-    }
-  }
-
-  // Summary line
-  let packetLoss = null;
-  const lossMatch = raw.match(/([\d.]+)%\s*packet loss/i) ||
-                    raw.match(/\(([\d.]+)%\s*loss\)/i);
-  if (lossMatch) packetLoss = parseFloat(lossMatch[1]);
-
-  const min  = rtts.length ? Math.min(...rtts) : null;
-  const max  = rtts.length ? Math.max(...rtts) : null;
-  const avg  = rtts.length ? rtts.reduce((a, b) => a + b, 0) / rtts.length : null;
-
-  return { rtts, min, max, avg: avg ? parseFloat(avg.toFixed(2)) : null, packetLoss };
-}
+// Parse traceroute output from macOS/Linux and Windows into structured hop data
+//
+// NOTE: this file previously also contained a `parsePingOutput` function.
+// It was removed during the v1.8.0 migration — confirmed to have zero
+// callers anywhere in the project (Hana's actual ping parsing lives in
+// src/components/PingTool.js and, for the shared/tested version, in
+// src/lib/pingParse.js — see mainValidatorParity.test.js and
+// pingToolParity.test.js for why those two haven't been unified yet).
 
 export function parseTracerouteLines(raw) {
   const lines = raw.split('\n').filter(Boolean);

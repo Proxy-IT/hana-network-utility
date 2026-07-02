@@ -195,7 +195,7 @@ you test. See [TERMS.md](TERMS.md) for the full terms of use.
 ## Building from Source
 
 ```bash
-# Prerequisites: Node.js v18 or later
+# Prerequisites: Node.js v22 or later
 git clone https://github.com/Proxy-IT/hana-network-utility.git
 cd hana-network-utility
 npm install
@@ -209,6 +209,8 @@ npm run build        # produce installer in dist/
 
 | Version | Highlights |
 |---|---|
+| v1.8.0 | Migrated build toolchain from Create React App to Vite; added unit test suite (88 assertions); tightened production CSP; Node.js requirement raised to v22 |
+| v1.7.2 | In-app feedback channel (Report a Bug / Request a Feature); hardened the open-external handler |
 | v1.7.1 | Persistent module state, real-time ping results, accurate unreachable detection, npm start fix |
 | v1.4.0 | First-launch disclaimer, About page, sidebar logo, openExternal links |
 | v1.3.0 | Multi-Ping monitor for up to 5 hosts, IP Info & WhoIs module with full export |

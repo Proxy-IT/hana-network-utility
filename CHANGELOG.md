@@ -160,6 +160,174 @@ thousands of entries.
 
 ---
 
+## v1.8.0 — July 2026
+
+### Build toolchain — CRA → Vite
+
+Migrated the entire build toolchain from Create React App to Vite 6.
+`react-scripts` and its ~40-vulnerability dependency chain are gone. Dev
+server starts in under a second instead of 20-40s. No component logic
+changed — this is a toolchain swap, not a rewrite.
+
+- Removed `react-scripts`, `wait-on` (replaced by a TCP checker two releases
+  ago, never removed), and `cross-env` (only existed to set `BROWSER=none`
+  for CRA; Vite doesn't need it)
+- Added `vite`, `@vitejs/plugin-react`, `vitest`, `@vitest/coverage-v8`
+- Dev server moved from port 3000 to 5173 (`start-electron.js`, `main.js`,
+  and the CSP's dev-mode `connect-src` all updated together)
+- `index.html` moved from `public/` to the project root (Vite requirement)
+- App version is now injected at build time from `package.json` via Vite's
+  `define` config (`__APP_VERSION__`), instead of being hardcoded separately
+  in About.js, Sidebar.js, and Disclaimer.js. This closes the exact class of
+  bug that shipped twice: a version bump missing one of several hardcoded
+  locations.
+
+### Security — production CSP tightened
+
+Re-derived the CSP allowlist from a fresh scan of every external call
+actually made in the current codebase, rather than trusting the list from
+an earlier draft (which had already drifted from reality once).
+
+- Production `script-src` no longer includes `unsafe-eval` (development
+  keeps it, since Vite's HMR needs it — packaged builds never see it)
+- `connect-src` is now an explicit domain allowlist (ipinfo.io,
+  api.ipify.org, rdap.org, api.whois.vu, plus the two Google Fonts domains)
+  instead of a `https:` wildcard
+- Removed `http://ip-api.com` from the CSP entirely — geolocation already
+  runs over `ipinfo.io` (HTTPS)
+- Added `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`
+  as cheap, zero-risk defense-in-depth
+- `style-src 'unsafe-inline'` remains — every component uses React inline
+  style objects throughout. Removing this requires a full CSS-modules
+  refactor, which is intentionally out of scope here (see engineering
+  backlog: CSP Hardening Phase 2)
+
+### Security — hardened the packaged installer
+
+- Removed `node_modules/**/*` from the electron-builder `files` array.
+  Nothing in `electron/main.js` or `preload.js` requires a third-party
+  package at runtime (only Node/Electron built-ins: `path`, `child_process`,
+  `os`, `dns`, `net`) — but the old config would have bundled Vite, Vitest,
+  and every dev dependency straight into the shipped installer the moment
+  they were added. CI now also explicitly verifies the packaged `app.asar`
+  contains none of these before an installer is uploaded.
+
+### Testing — unit test suite added
+
+Added Vitest with 7 test files and 88 assertions covering the project's
+pure logic (input validators, ping/traceroute output parsing, CIDR math,
+latency classification, and the subnet-sweep export report format). Every
+assertion was individually executed against the real, compiled source
+during this migration — not just written and assumed correct.
+
+Two real bugs were found and fixed in the process:
+- `parseCidrNotation` (see below) threw a `TypeError` on `null` input
+  instead of returning `null` gracefully
+- The shared `pingParse.js` module's `parseTimeout` used a narrower regex
+  than the live `PingTool.js` component — wiring it in as originally
+  written would have silently changed which lines get flagged as timeout
+
+**Also discovered:** three separate instances of "shared, testable module
+built but never actually imported by the real component" — `validate.js`
+vs. `main.js`'s own inline validators, `pingParse.js` vs. `PingTool.js`'s
+own local parsing functions, and (already fixed, see below)
+`SubnetSweep.js`'s own local CIDR parser. Where unifying was low-risk
+(SubnetSweep), it was done. Where it touches more fragile code or crosses
+a Node-version boundary (main.js, PingTool.js), it was deliberately
+deferred and instead covered by a parity test that pins the live behavior
+and fails if the two implementations drift apart — see
+`mainValidatorParity.test.js` and `pingToolParity.test.js` for the full
+reasoning.
+
+### Refactor — CIDR parsing unified and hardened
+
+`SubnetSweep.js` had its own local, unexported `parseCidr` (plus local
+`ipToInt`/`intToIp` duplicating `utils/subnet.js`). Extracted to
+`utils/subnet.js` as `parseCidrNotation`, verified behaviorally identical
+across 15 inputs (including malformed and edge-case input) before the
+component was updated to import it. Also added a defensive guard for
+non-string input (previously threw on `null`/`undefined`; now returns
+`null` like every other validator in the project).
+
+### Cleanup
+
+- Removed `parsePingOutput` from `src/utils/parsers.js` — confirmed zero
+  callers anywhere in the project
+- Removed a stale duplicate CSS property in the About page link styling
+  (carried over from v1.7.2)
+
+### CI — tests now gate every release
+
+Added a `test` job to the GitHub Actions workflow that runs the IPC
+contract checker (see below) and the full Vitest suite. Both
+`build-windows` and `build-mac` now require it to pass first
+(`needs: [test]`) — a failing test blocks the release entirely, rather than
+being something that could theoretically be run locally and forgotten.
+Also bumped `setup-node` to Node 22 in every job to match Electron 42's
+actual requirement (see the Node upgrade note below).
+
+### New tool — IPC contract checker
+
+Added `scripts/check-ipc-contract.js`, run via `npm run check:ipc` and
+wired into CI. It statically verifies that every `window.electronAPI.X`
+call in the renderer has a matching export in `preload.js`, and that every
+IPC channel `preload.js` sends/invokes has a matching handler in
+`electron/main.js`. This exists because of two real incidents this
+project has already had — a removed-but-still-called `getSystemInfo`
+that white-screened the app, and three error-listener channels that
+main.js sent but preload.js never relayed — neither of which any unit
+test could have caught, since both are wiring bugs, not logic bugs. The
+checker was verified against both incidents by deliberately reintroducing
+each one and confirming it's caught before being fixed.
+
+### Node.js version requirement raised to 22
+
+Electron 42 actually requires Node ≥22.12.0 (previously surfaced only as
+an `EBADENGINE` warning on Node 20). `package.json`'s `engines` field and
+every CI job now reflect this. **Action required on your development
+machine before this release**: upgrade from Node 20 to Node 22 LTS. See
+the project README or ask for the step-by-step if needed — the process is
+the same shape as the earlier Node 18→20 upgrade.
+
+### Bugs found and fixed during pre-release smoke testing
+
+The migration above was built and unit-tested before ever running against
+a real Node 22 environment. Manually walking through all 9 modules in a
+live dev build (and then the packaged installer) surfaced four issues no
+automated check caught:
+
+- **IP Info was completely broken.** `IpInfo.js` still called the old
+  `http://ip-api.com` endpoint directly. The production CSP's `connect-src`
+  had already been locked down to `https://ipinfo.io` (see above), so every
+  request was silently blocked and the module always showed "Failed to
+  fetch." Rewired `fetchIpDetails` to call `ipinfo.io` and remapped its
+  response shape (it merges ASN + org into one field, and doesn't provide
+  a region code or full country name the way the old endpoint did).
+- **Subnet Sweep's invalid-CIDR error banner didn't render.** The
+  `sweepError` state was set correctly and the `errorBanner` style existed,
+  but the actual JSX block that displays it had been dropped somewhere in
+  the `SubnetSweep.js` refactor. Entering `not-a-cidr` and pressing Start
+  Sweep did nothing visible — no crash, no error, just silence. Restored
+  the banner using the same pattern already used by `PingTool.js`,
+  `Traceroute.js`, and `PortScanner.js`.
+- **The packaged installer still bundled `node_modules`.** `react` and
+  `react-dom` were left under `dependencies` instead of `devDependencies`.
+  Vite already inlines both fully into the built JS bundle, and neither is
+  ever touched by `electron/main.js`, but electron-builder bundles
+  `node_modules` for anything listed under `dependencies` regardless of
+  the `files` array. This directly contradicted this release's own stated
+  goal (see "Security — hardened the packaged installer," above) — the new
+  CI asar check would have caught it on the very first release build.
+  Moved both to `devDependencies`; the packaged `app.asar` now contains
+  only `build/`, `electron/`, and `package.json`, exactly as intended.
+- **Dev server wouldn't start on this machine.** `vite.config.mjs` didn't
+  pin `server.host`, so Vite bound only to IPv6 loopback (`[::1]`) under
+  Node 22/24 here, while `start-electron.js` polls `127.0.0.1` (IPv4) and
+  timed out waiting for it every time. Added `host: '127.0.0.1'` to force
+  IPv4. Dev-only — never affected packaged builds.
+
+---
+
 ## v1.7.2 — July 2026
 
 ### New

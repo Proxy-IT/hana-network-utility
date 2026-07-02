@@ -1,4 +1,5 @@
 import React from 'react';
+import { intToIp, parseCidrNotation } from '../utils/subnet';
 import { exportSweepTxt, exportSweepCsv } from '../utils/export';
 import Instructions from './Instructions';
 import ExportBar from './ExportBar';
@@ -34,40 +35,10 @@ export const defaultSweepState = {
   sweepError:   null,
 };
 
-// ── CIDR utilities ────────────────────────────────────────────────────────────
-function ipToInt(ip) {
-  return ip.split('.').reduce((acc, o) => (acc << 8) + parseInt(o, 10), 0) >>> 0;
-}
-function intToIp(int) {
-  return [(int >>> 24)&255,(int >>> 16)&255,(int >>> 8)&255,int&255].join('.');
-}
-function parseCidr(cidr) {
-  const parts = cidr.trim().split('/');
-  if (parts.length !== 2) return null;
-  const ip     = parts[0].trim();
-  const prefix = parseInt(parts[1], 10);
-  if (isNaN(prefix) || prefix < 1 || prefix > 32) return null;
-  const ipParts = ip.split('.');
-  if (ipParts.length !== 4) return null;
-  if (!ipParts.every(p => /^\d{1,3}$/.test(p) && parseInt(p,10) <= 255)) return null;
-  const ipInt      = ipToInt(ip);
-  const maskInt    = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
-  const networkInt = (ipInt & maskInt) >>> 0;
-  const broadInt   = (networkInt | ~maskInt) >>> 0;
-  const firstHost  = prefix < 31 ? networkInt + 1 : networkInt;
-  const lastHost   = prefix < 31 ? broadInt   - 1 : broadInt;
-  const totalHosts = prefix >= 31 ? Math.pow(2, 32-prefix) : Math.pow(2, 32-prefix) - 2;
-  return {
-    network:    intToIp(networkInt),
-    broadcast:  intToIp(broadInt),
-    firstHost:  intToIp(firstHost),
-    lastHost:   intToIp(lastHost),
-    firstInt:   firstHost,
-    lastInt:    lastHost,
-    totalHosts: Math.max(0, totalHosts),
-    prefix,
-  };
-}
+// CIDR utilities are imported from utils/subnet.js (see import at top of file).
+// ipToInt/intToIp/parseCidr used to be defined locally here as duplicates of
+// the shared versions — extracted during the v1.8.0 migration so this logic
+// is shared and unit-testable. Behavior is unchanged; only the location moved.
 
 const INSTRUCTIONS = {
   title: 'How to use Subnet Sweep',
@@ -105,7 +76,7 @@ export default function SubnetSweep({ state, setState }) {
   function startSweep() {
     // ── Validate BEFORE setting running state so inputs never get stuck ────────
     if (mode === 'cidr') {
-      const parsed = parseCidr(cidr);
+      const parsed = parseCidrNotation(cidr);
       if (!parsed) {
         set({ sweepError: 'Invalid CIDR notation. Please enter a valid address like 192.168.1.0/24' });
         return;
@@ -125,7 +96,7 @@ export default function SubnetSweep({ state, setState }) {
     setResults([]); setRunning(true); setDone(false); setProgress(0); setDisplayLimit(254); set({ sweepError: null });
 
     if (mode === 'cidr') {
-      const parsed = parseCidr(cidr);
+      const parsed = parseCidrNotation(cidr);
 
       // Generate all IPs in the range
       const ips = [];
@@ -314,7 +285,7 @@ export default function SubnetSweep({ state, setState }) {
               <span style={s.hint}>supports /16 to /30</span>
             </div>
             {(() => {
-              const parsed = parseCidr(cidr);
+              const parsed = parseCidrNotation(cidr);
               return parsed ? (
                 <div style={{ alignSelf:'center', display:'flex', flexDirection:'column', gap:4, paddingTop:6 }}>
                   <div style={s.countBadge}>{parsed.totalHosts.toLocaleString()} hosts</div>
@@ -342,6 +313,14 @@ export default function SubnetSweep({ state, setState }) {
           Will scan <code style={s.previewCode}>{baseIp}.{start}</code>
           <span style={{ color:'#3D4D65', margin:'0 8px' }}>→</span>
           <code style={s.previewCode}>{baseIp}.{end}</code>
+        </div>
+      )}
+
+      {sweepError && (
+        <div style={s.errorBanner}>
+          <span style={s.errorBannerIcon}>⚠</span>
+          <span style={s.errorBannerMsg}>{sweepError}</span>
+          <button style={s.errorBannerClose} onClick={() => set({ sweepError: null })}>✕</button>
         </div>
       )}
 

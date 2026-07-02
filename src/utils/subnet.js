@@ -76,3 +76,51 @@ export function validateIp(ip) {
     return !isNaN(n) && n >= 0 && n <= 255 && String(n) === p;
   });
 }
+
+/**
+ * Parses a combined CIDR notation string (e.g. "192.168.1.0/24") into its
+ * network components. This was previously a local, unexported function
+ * living inside SubnetSweep.js — extracted here so it's shared and testable.
+ * Logic is unchanged from the original; only the ipToInt/intToIp calls now
+ * reference this file's own (behaviorally identical) versions instead of
+ * SubnetSweep.js's local duplicates, which have been removed.
+ *
+ * Distinct from calculateSubnet() above: that function takes a separate
+ * ip + cidr-number pair (used by the Subnet Calculator module); this one
+ * takes a single combined "ip/prefix" string (used by Subnet Sweep, which
+ * needs to parse a CIDR the user typed directly into one field).
+ *
+ * @param {string} cidr — e.g. "192.168.1.0/24"
+ * @returns {{
+ *   network: string, broadcast: string, firstHost: string, lastHost: string,
+ *   firstInt: number, lastInt: number, totalHosts: number, prefix: number
+ * } | null}
+ */
+export function parseCidrNotation(cidr) {
+  if (!cidr || typeof cidr !== 'string') return null;
+  const parts = cidr.trim().split('/');
+  if (parts.length !== 2) return null;
+  const ip     = parts[0].trim();
+  const prefix = parseInt(parts[1], 10);
+  if (isNaN(prefix) || prefix < 1 || prefix > 32) return null;
+  const ipParts = ip.split('.');
+  if (ipParts.length !== 4) return null;
+  if (!ipParts.every(p => /^\d{1,3}$/.test(p) && parseInt(p, 10) <= 255)) return null;
+  const ipInt      = ipToInt(ip);
+  const maskInt    = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+  const networkInt = (ipInt & maskInt) >>> 0;
+  const broadInt   = (networkInt | ~maskInt) >>> 0;
+  const firstHost  = prefix < 31 ? networkInt + 1 : networkInt;
+  const lastHost   = prefix < 31 ? broadInt   - 1 : broadInt;
+  const totalHosts = prefix >= 31 ? Math.pow(2, 32 - prefix) : Math.pow(2, 32 - prefix) - 2;
+  return {
+    network:    intToIp(networkInt),
+    broadcast:  intToIp(broadInt),
+    firstHost:  intToIp(firstHost),
+    lastHost:   intToIp(lastHost),
+    firstInt:   firstHost,
+    lastInt:    lastHost,
+    totalHosts: Math.max(0, totalHosts),
+    prefix,
+  };
+}
