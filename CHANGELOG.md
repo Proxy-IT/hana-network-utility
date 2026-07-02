@@ -160,6 +160,43 @@ thousands of entries.
 
 ---
 
+## v1.8.1 — July 2026
+
+### Branding — real logo, everywhere
+
+Every logo slot in the app was previously a placeholder — no `icon.png`
+ever existed in `public/`, so the sidebar, About page, and first-launch
+disclaimer all silently fell back to an animated pulse-dot, and both the
+Windows and Mac builds shipped with Electron's default icon instead of
+Hana's.
+
+- Added the finalized Hana mark (outline style, transparent background)
+  as `public/icon.png` — now renders correctly in the sidebar, About page,
+  and Disclaimer modal at every size, including the 36px sidebar crop
+  (verified the mark's ear tips don't clip against the circular mask)
+- Added a proper Windows app/installer icon (`build-resources/icon.ico`)
+  and Mac app icon (`build-resources/icon.icns`) — packaged builds no
+  longer show Electron's default icon in the taskbar, title bar, or
+  installer
+- Added a browser-tab favicon (`favicon.ico`, 16px/32px PNGs, Apple
+  touch icon) via `index.html` — previously there was none at all
+- Landing page (hana.proxy-it.co): replaced the same pulse-dot
+  placeholder in the nav bar and footer with the real mark, added a
+  proper favicon/apple-touch-icon/PWA manifest, and added Open Graph +
+  Twitter Card meta tags for link previews (previously none existed)
+
+### Fixed — electron-builder / Vite build folder collision
+
+`directories.buildResources` was never set, so electron-builder's default
+lookup folder (`build/`) collided with Vite's own output directory of the
+same name — anything placed there would have been silently wiped on the
+next `npm run build` (`emptyOutDir: true`). Set
+`directories.buildResources: "build-resources"` explicitly and moved both
+platform icons there, so this can't bite a future asset drop the way it
+almost did here.
+
+---
+
 ## v1.8.0 — July 2026
 
 ### Build toolchain — CRA → Vite

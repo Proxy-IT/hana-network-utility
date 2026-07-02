@@ -1,6 +1,6 @@
 {
   "name": "hana-network-utility",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Hana - Network Utility",
   "author": "Your Name",
   "main": "electron/main.js",
@@ -42,10 +42,12 @@
       "main": "electron/main.js"
     },
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build-resources"
     },
     "win": {
       "target": "nsis",
+      "icon": "build-resources/icon.ico",
       "artifactName": "Hana-NetworkUtility-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -63,7 +65,7 @@
         }
       ],
       "category": "public.app-category.utilities",
-      "icon": "public/icon.icns",
+      "icon": "build-resources/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build-resources/entitlements.mac.plist",

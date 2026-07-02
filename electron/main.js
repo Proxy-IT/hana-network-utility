@@ -4,19 +4,27 @@ const { exec, spawn } = require('child_process');
 const os = require('os');
 
 function createWindow() {
+  const isDev = !app.isPackaged;
+  // The favicon.ico copy in public/ (dev) or build/ (packaged, copied there by
+  // Vite) doubles as the window/taskbar icon — avoids shipping build-resources/
+  // in the packaged app just for this.
+  const iconPath = isDev
+    ? path.join(__dirname, '../public/favicon.ico')
+    : path.join(__dirname, '../build/favicon.ico');
+
   const win = new BrowserWindow({
     width: 1100,
     height: 760,
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#0A0E1A',
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  const isDev = !app.isPackaged;
   if (isDev) {
     win.loadURL('http://localhost:5173');
   } else {
