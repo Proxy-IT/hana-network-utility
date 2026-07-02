@@ -160,6 +160,58 @@ thousands of entries.
 
 ---
 
+## v1.8.2 — July 2026
+
+A security-and-reliability hardening pass from a full re-audit of the app.
+No new features — every change closes a real gap found in the review.
+
+### Security — CSV export hardening
+
+Exported CSV files are opened in Excel / Google Sheets / LibreOffice by the
+IT folks who use Hana, and they contain strings Hana does not control —
+WhoIs registrar/registrant/org fields, raw WhoIs text, ISP names,
+reverse-DNS PTR hostnames, and traceroute hostnames.
+
+- **Formula injection (CWE-1236) fixed.** A cell whose value began with
+  `=`, `+`, `-`, `@`, or a control character was executed as a formula on
+  open — a value like `=HYPERLINK(...)` or a DDE payload sourced from a
+  malicious WhoIs record could run when the user opened the export. All
+  export cells now pass through a single `csvCell()` helper that prefixes
+  such values with an apostrophe so they render as literal text. Plain
+  numbers (including negative coordinates and UTC offsets) are left numeric.
+- **Inconsistent quote escaping fixed.** Only the WhoIs CSV doubled embedded
+  quotes; the ping, traceroute, sweep, IP-info, and port-scan exporters did
+  not, so a value containing a `"` could shift or break columns. All six
+  now share the same escaping path. Covered by 8 new unit tests.
+
+### Reliability — Traceroute & Port Scanner no longer orphan backend work
+
+`Traceroute`, `Port Scanner`, `DNS Lookup`, and `IP Info` are not kept alive
+across tab switches (unlike Ping / Multi-Ping / Subnet Sweep). Previously,
+switching tabs mid-run left backend work running with no cleanup.
+
+- **Port Scanner can now be cancelled.** Added a real Stop button and a
+  `portscan-stop` IPC path that tears down in-flight sockets and halts the
+  queue. Previously a 500-port scan had no cancel control at all and ran to
+  completion (~50s) no matter what.
+- **Traceroute and Port Scanner now clean up on unmount.** Switching tabs
+  mid-run stops the `tracert` process / open sockets and detaches IPC
+  listeners, so nothing is orphaned and results never fire into an
+  unmounted component.
+
+### Cleanup — dead code removed
+
+- Removed `src/utils/IpInfo.js`, a stale 490-line duplicate of the IP Info
+  component that still called the old `ipapi.co` endpoint (which the
+  production CSP no longer allows). Only `src/components/IpInfo.js` is used;
+  the duplicate was an import-the-wrong-one landmine.
+- Removed the unused `execShell()` helper from `electron/main.js` (no
+  callers — every module uses `spawn` with argument arrays).
+- Removed `build-resources/notarize.js`, the redundant notarization hook
+  retired in v1.7.2 (electron-builder notarizes natively).
+
+---
+
 ## v1.8.1 — July 2026
 
 ### Branding — real logo, everywhere

@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Port Scanner
   startPortScan:          (opts) => ipcRenderer.send('portscan-start', opts),
+  stopPortScan:           ()     => ipcRenderer.send('portscan-stop'),
   onPortScanResult:       (cb)   => ipcRenderer.on('portscan-result', (_, d) => cb(d)),
   onPortScanDone:         (cb)   => ipcRenderer.on('portscan-done',   (_, d) => cb(d)),
   onPortScanError:        (cb)   => ipcRenderer.on('portscan-error',  (_, d) => cb(d)),

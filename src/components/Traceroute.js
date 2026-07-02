@@ -36,6 +36,16 @@ export default function Traceroute() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [hops]);
 
+  // Stop the tracert process and detach listeners when the component unmounts
+  // (e.g. the user switches tabs mid-trace) so the OS process isn't orphaned
+  // and data never fires into an unmounted component.
+  useEffect(() => () => {
+    if (window.electronAPI) {
+      window.electronAPI.stopTraceroute();
+      window.electronAPI.removeTracerouteListeners();
+    }
+  }, []);
+
   function clearTrace() {
     setHops([]); setDone(false); setErrorMsg(null);
   }

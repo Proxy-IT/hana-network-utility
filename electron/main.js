@@ -106,15 +106,6 @@ function sysCmd(name) {
   return path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', name);
 }
 
-function execShell(cmd, opts, cb) {
-  return exec(cmd, {
-    timeout: opts.timeout || 10000,
-    env: { ...process.env },
-    shell: isWin ? 'cmd.exe' : '/bin/sh',
-    ...opts,
-  }, cb);
-}
-
 // ── PING (streaming, line by line) ───────────────────────────────────────────
 ipcMain.on('ping-start', (event, { host, count }) => {
   // Validate inputs
@@ -577,6 +568,17 @@ ipcMain.handle('dns-lookup', async (event, { host, type, server }) => {
 });
 
 // ── PORT SCANNER ──────────────────────────────────────────────────────────────
+// Single active scan at a time (the app is single-window). The flag halts the
+// queue and the socket set lets a stop request tear down in-flight connections.
+let portScanActive = false;
+const activeScanSockets = new Set();
+
+ipcMain.on('portscan-stop', () => {
+  portScanActive = false;
+  activeScanSockets.forEach(sock => { try { sock.destroy(); } catch {} });
+  activeScanSockets.clear();
+});
+
 ipcMain.on('portscan-start', (event, { host, ports }) => {
   // Validate host
   if (!isValidHost(host)) {
@@ -602,6 +604,12 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
   }
   ports = normalizedPorts; // use the normalized array from here on
 
+  // Fresh scan — clear any lingering state from a previous run
+  portScanActive = false;
+  activeScanSockets.forEach(sock => { try { sock.destroy(); } catch {} });
+  activeScanSockets.clear();
+  portScanActive = true;
+
   const net      = require('net');
   const total    = ports.length;
   let completed  = 0;
@@ -612,6 +620,7 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
   function scanPort(port) {
     const socket = new net.Socket();
     let status   = 'filtered';
+    activeScanSockets.add(socket);
 
     socket.setTimeout(TIMEOUT);
 
@@ -635,6 +644,10 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
     });
 
     socket.on('close', () => {
+      activeScanSockets.delete(socket);
+      // A stop request cancelled the scan — don't emit results or dispatch more
+      if (!portScanActive) return;
+
       event.sender.send('portscan-result', { port, status });
       completed++;
 
@@ -644,6 +657,7 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
       }
 
       if (completed === total) {
+        portScanActive = false;
         event.sender.send('portscan-done', {});
       }
     });

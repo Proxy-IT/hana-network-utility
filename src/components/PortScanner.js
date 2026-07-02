@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Instructions from './Instructions';
 import ExportBar from './ExportBar';
+import { csvCell } from '../utils/export';
 
 const isBrowser = !window.electronAPI;
 
@@ -92,7 +93,7 @@ function exportScanCsv({ host, results }) {
     ['Port', 'Service', 'Status', 'Host', 'Timestamp'],
     ...results.sort((a,b) => a.port - b.port).map(r => [r.port, r.service || 'Unknown', r.status, host, ts]),
   ];
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const csv = rows.map(r => r.map(csvCell).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -193,11 +194,29 @@ export default function PortScanner() {
     window.electronAPI.startPortScan({ host: host.trim(), ports });
   }
 
+  function stopScan() {
+    setRunning(false); setDone(true);
+    if (window.electronAPI) {
+      window.electronAPI.stopPortScan();
+      window.electronAPI.removePortScanListeners();
+    }
+  }
+
   function clearScan() {
     setResults([]); setDone(false); setProgress(0);
     setHost(''); setCustomPorts(''); setErrorMsg(null);
     setSelected(new Set(DEFAULT_PORTS));
   }
+
+  // Cancel any in-flight scan and detach listeners when the component unmounts
+  // (e.g. the user switches tabs mid-scan) so backend sockets aren't orphaned
+  // and results never fire into an unmounted component.
+  useEffect(() => () => {
+    if (window.electronAPI) {
+      window.electronAPI.stopPortScan();
+      window.electronAPI.removePortScanListeners();
+    }
+  }, []);
 
   function validateHostInput(host) {
     const trimmed = (host || '').trim();
@@ -258,12 +277,17 @@ export default function PortScanner() {
             placeholder="hostname or IP address"
             spellCheck={false} disabled={running} />
         </div>
-        <button
-          style={{ ...s.btn, ...(running || !disclaimer ? s.btnOff : {}), alignSelf: 'flex-end' }}
-          onClick={startScan} disabled={running || !disclaimer}
-          title={!disclaimer ? 'You must confirm authorization before scanning' : ''}>
-          {running ? <><span style={s.spinner} /> Scanning…</> : '⊞  Start Scan'}
-        </button>
+        {running
+          ? <button style={{ ...s.btn, ...s.btnStop, alignSelf: 'flex-end' }} onClick={stopScan}>
+              ■  Stop Scan
+            </button>
+          : <button
+              style={{ ...s.btn, ...(!disclaimer ? s.btnOff : {}), alignSelf: 'flex-end' }}
+              onClick={startScan} disabled={!disclaimer}
+              title={!disclaimer ? 'You must confirm authorization before scanning' : ''}>
+              ⊞  Start Scan
+            </button>
+        }
       </div>
 
       {/* Port selector */}
@@ -419,6 +443,7 @@ const s = {
   input: { background: '#0D1525', border: '1px solid #1E2D45', borderRadius: 6, color: '#E8EDF5', fontFamily: 'JetBrains Mono, monospace', fontSize: 13, padding: '8px 12px', outline: 'none' },
   btn: { background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)', color: '#00D4FF', borderRadius: 6, padding: '8px 20px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 },
   btnOff: { opacity: 0.4, cursor: 'not-allowed' },
+  btnStop: { background: 'rgba(255,75,106,0.1)', border: '1px solid rgba(255,75,106,0.3)', color: '#FF4B6A' },
   spinner: { width: 10, height: 10, borderRadius: '50%', border: '2px solid rgba(0,212,255,0.3)', borderTopColor: '#00D4FF', display: 'inline-block', animation: 'spin 0.7s linear infinite' },
 
   portSection: { background: '#111827', border: '1px solid #1E2D45', borderRadius: 8, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 },

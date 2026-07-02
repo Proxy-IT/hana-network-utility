@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSweepReport } from '../export.js';
+import { buildSweepReport, csvCell } from '../export.js';
 
 /**
  * Export format regression tests.
@@ -88,5 +88,48 @@ describe('buildSweepReport (real production code from src/utils/export.js)', () 
     expect(() => buildSweepReport({
       mode: 'range', baseIp: '10.0.0', start: 1, end: 0, results: [],
     })).not.toThrow();
+  });
+});
+
+describe('csvCell — CSV formula injection + delimiter safety', () => {
+  it('neutralizes a leading = formula by prefixing an apostrophe', () => {
+    // WhoIs/DNS/ISP fields are attacker-influenceable; a raw =... cell executes
+    // as a formula when the exported CSV is opened in Excel/Sheets.
+    expect(csvCell('=HYPERLINK("http://evil","x")'))
+      .toBe(`"'=HYPERLINK(""http://evil"",""x"")"`);
+  });
+
+  it('neutralizes the other dangerous leading characters (+ - @)', () => {
+    expect(csvCell('+1+1')).toBe(`"'+1+1"`);
+    expect(csvCell('@SUM(A1)')).toBe(`"'@SUM(A1)"`);
+    expect(csvCell('-2+3+cmd')).toBe(`"'-2+3+cmd"`);
+  });
+
+  it('neutralizes a DDE-style payload starting with a control character', () => {
+    expect(csvCell('\t=cmd|calc')).toBe(`"'\t=cmd|calc"`);
+  });
+
+  it('leaves plain numbers — including negatives — untouched so they stay numeric', () => {
+    expect(csvCell('-77.7953')).toBe(`"-77.7953"`);
+    expect(csvCell('443')).toBe(`"443"`);
+    expect(csvCell(22)).toBe(`"22"`);
+  });
+
+  it('doubles embedded quotes so a value cannot break out of its column', () => {
+    expect(csvCell('AS15169 "Google" LLC')).toBe(`"AS15169 ""Google"" LLC"`);
+  });
+
+  it('keeps commas and newlines contained within the quoted cell', () => {
+    expect(csvCell('a,b\nc')).toBe(`"a,b\nc"`);
+  });
+
+  it('renders null/undefined as an empty quoted cell', () => {
+    expect(csvCell(null)).toBe('""');
+    expect(csvCell(undefined)).toBe('""');
+  });
+
+  it('does not prefix an ordinary hostname/value', () => {
+    expect(csvCell('dns.google')).toBe(`"dns.google"`);
+    expect(csvCell('Open')).toBe(`"Open"`);
   });
 });

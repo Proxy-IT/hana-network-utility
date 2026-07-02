@@ -1,5 +1,31 @@
 // ── Export utilities ──────────────────────────────────────────────────────────
 
+/**
+ * Serialize one value into a safe CSV cell.
+ *
+ * Two protections, since exported data includes untrusted third-party strings
+ * (WhoIs registrar/registrant/org fields, raw WhoIs text, ISP names, reverse-DNS
+ * PTR hostnames, traceroute hostnames):
+ *
+ *  1. Formula injection — a cell beginning with = + - @ or a control character
+ *     is executed as a formula by Excel/Sheets/LibreOffice. Prefix such values
+ *     with an apostrophe so they render as literal text. Plain numbers (including
+ *     negative coordinates / UTC offsets) are left untouched so they stay numeric.
+ *  2. Delimiter breakage — embedded double-quotes are doubled and the whole value
+ *     is wrapped in quotes, so commas, quotes, and newlines can't shift columns.
+ */
+export function csvCell(value) {
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) {
+    s = "'" + s;
+  }
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function toCsv(rows) {
+  return rows.map(r => r.map(csvCell).join(',')).join('\n');
+}
+
 function downloadFile(filename, content, mimeType = 'text/plain') {
   const blob = new Blob([content], { type: mimeType });
   const url  = URL.createObjectURL(blob);
@@ -92,7 +118,7 @@ export function exportPingCsv({ host, output, samples, liveStats, continuous }) 
     rows.push(['Max_ms',  output.max  ?? '', '']);
     rows.push(['Loss_%',  output.packetLoss ?? '', '']);
   }
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const csv = toCsv(rows);
   downloadFile(`ping_${host}_${timestamp()}.csv`, csv, 'text/csv');
 }
 
@@ -150,7 +176,7 @@ export function exportTraceCsv({ host, hops }) {
       ts,
     ]);
   });
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const csv = toCsv(rows);
   downloadFile(`traceroute_${host}_${timestamp()}.csv`, csv, 'text/csv');
 }
 
@@ -227,7 +253,7 @@ export function exportSweepCsv({ baseIp, start, end, cidr, mode, results }) {
       .map(r => [r.ip, r.alive ? 'Live' : 'No Response', mode === 'cidr' ? 'CIDR' : 'Range', rangeStr, ts]),
   ];
 
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const csv = toCsv(rows);
   const filename = mode === 'cidr'
     ? `sweep_${cidr.replace('/', '-')}_${timestamp()}.csv`
     : `sweep_${baseIp}_${timestamp()}.csv`;
@@ -279,7 +305,7 @@ export function exportMyIpCsv(data) {
     ['Latitude',    data.latitude    || '', ''],
     ['Longitude',   data.longitude   || '', ''],
   ];
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const csv = toCsv(rows);
   downloadFile(`my_public_ip_${timestamp()}.csv`, csv, 'text/csv');
 }
 
@@ -326,7 +352,7 @@ export function exportIpLookupCsv(data) {
     ['Latitude',    data.latitude    || '', ''],
     ['Longitude',   data.longitude   || '', ''],
   ];
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const csv = toCsv(rows);
   downloadFile(`ip_lookup_${data.ip}_${timestamp()}.csv`, csv, 'text/csv');
 }
 
@@ -417,6 +443,6 @@ export function exportWhoisCsv({ query, data }) {
     ]);
   }
 
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = toCsv(rows);
   downloadFile(`whois_${query.replace(/[^a-zA-Z0-9.-]/g, '_')}_${timestamp()}.csv`, csv, 'text/csv');
 }
