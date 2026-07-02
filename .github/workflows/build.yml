@@ -198,26 +198,52 @@ jobs:
           name: mac-installer
           path: dist/mac
 
+      - name: Extract this version's CHANGELOG.md section
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VER_ESC=$(echo "$VERSION" | sed 's/\./\\./g')
+          awk -v ver="$VER_ESC" '
+            BEGIN { capture=0 }
+            $0 ~ "^## " ver "( |$)" { capture=1; next }
+            capture && /^## v/ { capture=0 }
+            capture { print }
+          ' CHANGELOG.md > changelog-section.md
+          # trim trailing blank lines, then a trailing "---" separator if present
+          sed -i -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}' changelog-section.md
+          sed -i '${/^---$/d}' changelog-section.md
+          if [ ! -s changelog-section.md ]; then
+            echo "WARNING: no CHANGELOG.md section found for $VERSION — release notes will fall back to the Downloads section only." >&2
+          fi
+
+      - name: Build release notes
+        run: |
+          {
+            echo "## Hana - Network Utility ${{ github.ref_name }}"
+            echo
+            echo "### Downloads"
+            echo
+            echo "**Windows**"
+            echo "- Download the \`.exe\` file below and run the installer"
+            echo "- SmartScreen may show a warning — click **More info → Run anyway**"
+            echo
+            echo "**Mac**"
+            echo "- Download the \`.dmg\` file below"
+            echo "- Signed and notarized by Apple — opens normally, no Gatekeeper warning"
+            echo
+            echo "---"
+            echo
+            cat changelog-section.md
+            echo
+            echo "---"
+            echo "No telemetry. No ads. No data collection."
+            echo "See [CHANGELOG.md](CHANGELOG.md) for full patch notes."
+          } > release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Hana - Network Utility ${{ github.ref_name }}
-          body: |
-            ## Hana - Network Utility ${{ github.ref_name }}
-
-            ### Downloads
-
-            **Windows**
-            - Download the `.exe` file below and run the installer
-            - SmartScreen may show a warning — click **More info → Run anyway**
-
-            **Mac**
-            - Download the `.dmg` file below
-            - Signed and notarized by Apple — opens normally, no Gatekeeper warning
-
-            ---
-            No telemetry. No ads. No data collection.
-            See [CHANGELOG.md](CHANGELOG.md) for full patch notes.
+          body_path: release-notes.md
           files: |
             dist/windows/*.exe
             dist/mac/*.dmg
