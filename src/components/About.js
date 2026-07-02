@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+
+const isBrowser = !window.electronAPI;
 
 // Single source of truth: injected at build time by vite.config.mjs's
 // `define` config, which reads the version from package.json. This
@@ -123,6 +125,9 @@ export default function About() {
         </div>
       </div>
 
+      {/* Updates */}
+      <UpdatesSection />
+
       {/* Two column — Links + Details */}
       <div style={s.twoCol}>
 
@@ -160,7 +165,10 @@ export default function About() {
         <span>
           Hana collects no data, no telemetry, and makes no background network
           connections. Outbound requests are made only when you explicitly
-          trigger them within the app.
+          trigger them within the app. The "check for updates on startup"
+          option above is a toggle you must turn on yourself — it ships
+          off by default, and Hana never checks for updates on its own
+          unless you enable it.
         </span>
       </div>
 
@@ -172,6 +180,138 @@ export default function About() {
     </div>
   );
 }
+
+// ── Updates ─────────────────────────────────────────────────────────────────
+// Manual "Check for Updates" plus an opt-in "check on startup" toggle. Nothing
+// here reaches the network unless the user clicks Check or has opted in — the
+// app's privacy promise is that outbound requests only happen on explicit action.
+function UpdatesSection() {
+  const [supported, setSupported]   = useState(false);
+  const [version, setVersion]       = useState('');
+  const [autoCheck, setAutoCheck]   = useState(false);
+  const [status, setStatus]         = useState('idle'); // idle|checking|available|downloading|downloaded|uptodate|error
+  const [available, setAvailable]   = useState(null);   // { version }
+  const [progress, setProgress]     = useState(0);
+  const [error, setError]           = useState(null);
+
+  useEffect(() => {
+    if (isBrowser) return;
+    const api = window.electronAPI;
+    api.getUpdateState().then(st => {
+      setSupported(st.supported);
+      setVersion(st.currentVersion);
+      setAutoCheck(st.autoCheckOnStartup);
+    }).catch(() => {});
+
+    api.onUpdateChecking(() => { setStatus('checking'); setError(null); });
+    api.onUpdateAvailable(info => { setStatus('available'); setAvailable(info); });
+    api.onUpdateNotAvailable(() => setStatus('uptodate'));
+    api.onUpdateProgress(p => { setStatus('downloading'); setProgress(Math.round(p.percent || 0)); });
+    api.onUpdateDownloaded(info => { setStatus('downloaded'); setAvailable(info); });
+    api.onUpdateError(e => { setStatus('error'); setError(e.message); });
+
+    return () => api.removeUpdateListeners();
+  }, []);
+
+  function toggleAuto() {
+    if (isBrowser) return;
+    const next = !autoCheck;
+    setAutoCheck(next);
+    window.electronAPI.setUpdateAutoCheck(next);
+  }
+
+  const busy = status === 'checking' || status === 'downloading';
+
+  return (
+    <div style={s.section}>
+      <div style={s.sectionLabel}>UPDATES</div>
+      <div style={us.card}>
+        <div style={us.topRow}>
+          <div style={us.verBlock}>
+            <span style={us.verLabel}>Current version</span>
+            <span style={us.verValue}>v{version || (isBrowser ? '—' : '…')}</span>
+          </div>
+          {status === 'available' ? (
+            <button style={us.primaryBtn} onClick={() => window.electronAPI.downloadUpdate()}>
+              ↓  Download v{available?.version}
+            </button>
+          ) : status === 'downloaded' ? (
+            <button style={us.primaryBtn} onClick={() => window.electronAPI.installUpdate()}>
+              ⟳  Install &amp; Restart
+            </button>
+          ) : (
+            <button
+              style={{ ...us.checkBtn, ...((!supported || busy) ? us.btnOff : {}) }}
+              onClick={() => !busy && supported && window.electronAPI.checkForUpdate()}
+              disabled={!supported || busy}>
+              {status === 'checking' ? <><span style={us.spinner} /> Checking…</> : '⟳  Check for Updates'}
+            </button>
+          )}
+        </div>
+
+        {/* Status line */}
+        {!supported && (
+          <div style={us.note}>Updates are available in the installed app.</div>
+        )}
+        {supported && status === 'uptodate' && (
+          <div style={{ ...us.note, color: '#00FF9C' }}>✓ You're on the latest version.</div>
+        )}
+        {supported && status === 'available' && (
+          <div style={us.note}>
+            Version <strong style={{ color: '#E8EDF5' }}>v{available?.version}</strong> is available.{' '}
+            <button style={us.linkBtn} onClick={() => openLink(`${REPO}/releases/latest`)}>View release notes ↗</button>
+          </div>
+        )}
+        {supported && status === 'downloading' && (
+          <div style={us.progressWrap}>
+            <div style={us.progressTrack}><div style={{ ...us.progressFill, width: `${progress}%` }} /></div>
+            <span style={us.progressPct}>{progress}%</span>
+          </div>
+        )}
+        {supported && status === 'downloaded' && (
+          <div style={{ ...us.note, color: '#00FF9C' }}>
+            ✓ Version v{available?.version} downloaded — restart to finish installing.
+          </div>
+        )}
+        {supported && status === 'error' && (
+          <div style={{ ...us.note, color: '#FF4B6A' }}>⚠ {error || 'Update check failed.'}</div>
+        )}
+
+        {/* Opt-in auto-check — ships unchecked; Hana never checks on its own unless enabled here */}
+        {supported && (
+          <div>
+            <label style={us.autoRow}>
+              <input type="checkbox" checked={autoCheck} onChange={toggleAuto} style={{ accentColor: '#00D4FF', cursor: 'pointer' }} />
+              <span style={us.autoText}>Automatically check for updates on startup</span>
+            </label>
+            <div style={us.autoHint}>Off by default. Hana only checks for updates when you ask it to, unless you turn this on.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const us = {
+  card: { background: '#111827', border: '1px solid #1E2D45', borderRadius: 8, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 },
+  topRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' },
+  verBlock: { display: 'flex', flexDirection: 'column', gap: 3 },
+  verLabel: { fontSize: 10, color: '#3D4D65', textTransform: 'uppercase', letterSpacing: '0.1em' },
+  verValue: { fontSize: 18, fontWeight: 600, color: '#E8EDF5', fontFamily: 'JetBrains Mono, monospace' },
+  checkBtn: { background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)', color: '#00D4FF', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 },
+  primaryBtn: { background: 'rgba(0,255,156,0.12)', border: '1px solid rgba(0,255,156,0.35)', color: '#00FF9C', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' },
+  btnOff: { opacity: 0.4, cursor: 'not-allowed' },
+  spinner: { width: 10, height: 10, borderRadius: '50%', border: '2px solid rgba(0,212,255,0.3)', borderTopColor: '#00D4FF', display: 'inline-block', animation: 'spin 0.7s linear infinite' },
+  note: { fontSize: 12, color: '#8892A4', fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.6 },
+  linkBtn: { background: 'transparent', border: 'none', color: '#00D4FF', cursor: 'pointer', fontSize: 12, padding: 0, fontFamily: 'JetBrains Mono, monospace' },
+  progressWrap: { display: 'flex', alignItems: 'center', gap: 12 },
+  progressTrack: { flex: 1, height: 4, background: '#1A2235', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', background: '#00D4FF', borderRadius: 2, transition: 'width 0.2s ease', boxShadow: '0 0 8px rgba(0,212,255,0.4)' },
+  progressPct: { fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#8892A4', width: 36, textAlign: 'right' },
+  autoRow: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderTop: '1px solid rgba(30,45,69,0.5)', paddingTop: 12 },
+  autoText: { fontSize: 12, color: '#8892A4' },
+  autoHint: { fontSize: 11, color: '#3D4D65', marginTop: 4, marginLeft: 24 },
+};
 
 function DetailRow({ label, value }) {
   return (

@@ -160,6 +160,73 @@ thousands of entries.
 
 ---
 
+## v1.9.0 — July 2026
+
+### In-app auto-updater
+
+Hana can now update itself. Previously every new version meant manually
+re-finding the release, re-downloading, and re-clearing SmartScreen — so
+security fixes reached users slowly, if at all.
+
+- **About → Updates** has a **Check for Updates** button. If a newer version
+  is published it offers **Download**, then **Install & Restart**. The
+  download is integrity-checked (SHA-512, verified against the release
+  metadata served over HTTPS from GitHub) before it's ever run.
+- **Privacy preserved.** The checker never runs on its own. There's an
+  opt-in **"Automatically check for updates on startup"** toggle that
+  defaults **off**, so the app's promise — outbound requests only happen
+  when you explicitly trigger them — holds unless you choose otherwise.
+- Works on Windows and both Mac architectures. Note: until Windows EV code
+  signing lands (planned for a later release), the updated Windows build can
+  still trigger a SmartScreen prompt on first launch — the download itself
+  is hash-verified regardless.
+
+**Security properties**
+- **Notify-only by default** — a found update is surfaced, never auto-downloaded
+  or auto-installed. Each step requires an explicit click.
+- **No arbitrary URLs** — the feed is pinned to this exact GitHub repo at build
+  time and re-verified at runtime; the app never calls `setFeedURL` with a
+  dynamic value, so an update can only ever come from the trusted source.
+- **Cryptographic verification** — every download's SHA-512 is checked against
+  the release metadata before install, and that check is never disabled. macOS
+  updates must additionally carry a valid Apple (notarization) signature.
+- **Downgrade prevention** — `allowDowngrade` and `allowPrerelease` are both
+  off, so the updater will never move you to an older or pre-release build even
+  if one is published or the feed is rolled back.
+
+**Under the hood**
+- Added `electron-updater`, wired to the GitHub Releases feed via an explicit
+  `publish` config (electron-builder already generates the required
+  `latest.yml` / `latest-mac.yml` with per-file hashes).
+- Update logic lives in `electron/updater.js`; `autoDownload` and
+  `autoInstallOnAppQuit` are both off so every step (check → download →
+  install) is user-consented. The startup preference persists to a small
+  JSON file in the app's userData directory.
+- The CI "no dev-dependencies shipped" check was retargeted: it now matches
+  dev-tooling package names specifically, since `electron-updater` is a
+  legitimate runtime dependency that (correctly) ships inside `app.asar`.
+
+**Documentation**
+- Rewrote `PRIVACY.md` and the in-app Disclaimer/About privacy copy to
+  explicitly name the startup-check toggle and state it ships **off by
+  default** — previously this was only implied by general "explicit
+  trigger" language. Also fixed a stale `ip-api.com` reference and added
+  the DNS Lookup / Port Scanner network activity that was missing.
+- Added `SECURITY.md` (linked from the README but never actually created)
+  covering vulnerability reporting and, specifically, the security
+  properties the auto-updater is expected to uphold.
+- Rewrote `README.md` to match what's actually built: Windows + macOS
+  (was Windows-only), all 9 modules (DNS Lookup and Port Scanner were
+  missing), CIDR subnet sweep, signed/notarized macOS status, the
+  `ipinfo.io` endpoint, and a new "Staying up to date" section.
+- Fixed a placeholder `[your email]` in `TERMS.md`'s security-contact line.
+- Fixed `package.json`'s `author` field (was the literal placeholder
+  `"Your Name"`) and added an explicit `copyright` field — both show up in
+  the packaged Windows exe's file properties (Company/Copyright), which
+  previously displayed the placeholder instead of Proxy-IT LLC.
+
+---
+
 ## v1.8.2 — July 2026
 
 A security-and-reliability hardening pass from a full re-audit of the app.

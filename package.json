@@ -1,8 +1,8 @@
 {
   "name": "hana-network-utility",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Hana - Network Utility",
-  "author": "Your Name",
+  "author": "Proxy-IT LLC",
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
@@ -20,19 +20,27 @@
     "audit:prod": "npm audit --omit=dev"
   },
   "devDependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.0",
     "concurrently": "^8.2.0",
     "electron": "^42.0.0",
     "electron-builder": "^25.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "vite": "^6.0.0",
-    "vitest": "^2.1.0",
-    "@vitest/coverage-v8": "^2.1.0"
+    "vitest": "^2.1.0"
   },
   "build": {
     "appId": "com.hana.networkutility",
     "productName": "Hana - Network Utility",
+    "copyright": "Copyright © 2026 Proxy-IT LLC",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Proxy-IT",
+        "repo": "hana-network-utility"
+      }
+    ],
     "files": [
       "build/**/*",
       "electron/**/*",
@@ -93,5 +101,8 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

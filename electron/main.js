@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 const os = require('os');
+const updater = require('./updater');
 
 function createWindow() {
   const isDev = !app.isPackaged;
@@ -94,9 +95,22 @@ function createWindow() {
   win.on('ready-to-show', () => win.show());
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  updater.init();
+  updater.maybeRunStartupCheck();  // no-op unless the user opted in (default off)
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
+// ── AUTO-UPDATER IPC ─────────────────────────────────────────────────────────
+// Thin delegators to electron/updater.js. Registered here (not in the module)
+// so the IPC contract checker, which scans main.js, sees these channels.
+ipcMain.on('update-check',    () => updater.checkForUpdates());
+ipcMain.on('update-download', () => updater.downloadUpdate());
+ipcMain.on('update-install',  () => updater.quitAndInstall());
+ipcMain.handle('update-get-state',      () => updater.getState());
+ipcMain.handle('update-set-auto-check', (event, value) => updater.setAutoCheck(value));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const isWin = process.platform === 'win32';

@@ -6,7 +6,7 @@
 
 <div align="center">
 
-**Fast, clean, and lightweight network diagnostics for Windows.**
+**Fast, clean, and lightweight network diagnostics for Windows and macOS.**
 *No command prompt. No dependencies. No bloat.*
 
 [Download Latest Release](../../releases/latest) · [Report a Bug](../../issues) · [Request a Feature](../../issues)
@@ -25,6 +25,9 @@ The name Hana (ханa) means "flower" in Bosnian — something small, purposefu
 and built with care. That philosophy carries through to every part of the app:
 lightweight installer, clean interface, instant results.
 
+It ships nine modules in a single window, runs on Windows and macOS, collects
+no data, and can keep itself up to date.
+
 ---
 
 ## Modules
@@ -32,9 +35,10 @@ lightweight installer, clean interface, instant results.
 ### ◎ Ping
 Test whether a host is reachable and measure round-trip time with precision.
 
-- **Fixed mode** — send 1 to 16 packets and get a clean min/avg/max summary
+- **Fixed mode** — send 1, 2, 4, 8, or 16 packets and get a clean min/avg/max summary
 - **Continuous mode** — run an infinite ping with a live scrolling RTT graph,
   real-time packet loss counter, and color-coded latency classification
+- Correctly detects "destination host unreachable" replies as failures
 - Export results as `.txt` or `.csv`
 
 ### ⊛ Multi-Ping
@@ -43,8 +47,8 @@ Monitor up to 5 hosts simultaneously on a single screen.
 - Each host gets its own live status card — green when responding, red when down
 - Sparkline bar chart shows the last 20 ping results per host at a glance
 - Global status bar shows total up vs down count instantly
+- Hosts keep pinging in the background while you use other modules
 - Designed for watching devices come back online after a reboot or failover
-  without switching windows
 
 ### ⤵ Traceroute
 Trace the exact network path your traffic takes to reach any destination.
@@ -57,10 +61,13 @@ Trace the exact network path your traffic takes to reach any destination.
 ### ⊞ Subnet Sweep
 Discover every host on a subnet without touching the command line.
 
-- Enter the first three octets of your subnet and a scan range
-- Parallel ping sweep with live progress bar
-- Two-column results table — green for live hosts, gray for no response
-- Sorted numerically so results are immediately readable
+- **Range mode** — enter the first three octets and a start/end host range
+- **CIDR mode** — sweep an entire subnet from `/16` through `/30` by notation,
+  with a live host-count and range preview
+- Parallel ping sweep with a live progress bar
+- **Stop Scan** cancels a running sweep instantly and preserves partial results
+- Results paginate (first 254 shown, live hosts bubble to the top) so large
+  sweeps stay responsive; export always includes every result
 - Export full results as `.txt` or `.csv`
 
 ### ⊟ Subnet Calculator
@@ -84,6 +91,26 @@ Three tools in one tab — no browser required.
   including registrar, creation and expiry dates, and name servers
 - All three sections export to `.txt` and `.csv`
 
+### ◈ DNS Lookup
+Resolve DNS records for any hostname or IP address.
+
+- Supports A, AAAA, CNAME, MX, TXT, NS, and PTR records — or **ALL** at once
+- Choose a resolver: Google (8.8.8.8), Cloudflare (1.1.1.1), or a custom server
+- Automatic reverse (PTR) lookup when you enter an IP address
+- Color-coded record badges with TTL and MX priority
+- Each request uses an isolated resolver — no global DNS state is mutated
+- Export results as `.txt` or `.csv`
+
+### ⊘ Port Scanner
+Check which TCP ports are open, closed, or filtered on a host.
+
+- 24 common ports as selectable chips, plus Web / Remote / Mail / Database /
+  Network group presets and a custom-port field
+- Open (green), Closed (gray), and Filtered (amber) results with service names
+- **Stop** cancels a running scan at any time
+- A mandatory authorization checkbox must be confirmed before scanning is enabled
+- Export results as `.txt` or `.csv`
+
 ### ≋ Latency Guide
 A built-in reference for understanding what your ping results actually mean.
 
@@ -100,11 +127,12 @@ A built-in reference for understanding what your ping results actually mean.
 |---|---|---|
 | Continuous ping with graph | `ping -t 8.8.8.8` + mental math | One click, live graph |
 | Monitor multiple hosts | Multiple windows | Multi-Ping, one screen |
-| Subnet sweep | Script or third-party tool | Built in, visual results |
+| Subnet sweep (range or CIDR) | Script or third-party tool | Built in, visual results |
 | Subnet calculation | RFC lookup + manual math | Instant, with binary view |
 | Traceroute | `tracert -d hostname` | Streaming, color-coded |
-| Public IP lookup | Open browser, google it | Built in, instant |
-| WhoIs lookup | Command line tool or website | Built in, exportable |
+| DNS records | `nslookup -type=MX ...` | All record types, any resolver |
+| TCP port check | `Test-NetConnection` / `nc` loop | Presets + custom, cancellable |
+| Public IP / WhoIs lookup | Open browser, google it | Built in, exportable |
 | Export results | Copy/paste from terminal | One click `.txt` or `.csv` |
 
 ---
@@ -114,70 +142,64 @@ A built-in reference for understanding what your ping results actually mean.
 ### Windows
 
 1. Go to the [Releases page](../../releases/latest)
-2. Download `Hana - Network Utility Setup 1.7.1.exe`
+2. Download `Hana-NetworkUtility-Setup-<version>.exe`
 3. Run the installer and follow the prompts
 4. Launch Hana from the Start Menu
 
 > **Windows SmartScreen warning:** If you see "Windows protected your PC",
-> click **More info** then **Run anyway**. This appears because Hana is not
-> yet code signed. It is completely safe to install.
+> click **More info** then **Run anyway**. This appears because the Windows
+> build is not yet code signed (planned for a future release). The installer
+> is safe, and downloads delivered by the in-app updater are additionally
+> verified by SHA-512 hash.
+
+### macOS
+
+1. On the [Releases page](../../releases/latest), download the `.dmg` for your chip:
+   - **Apple Silicon (M1–M4)** → the file ending in `arm64.dmg`
+   - **Intel** → the standard `x64.dmg`
+2. Open the DMG and drag **Hana - Network Utility** onto the Applications folder
+3. Launch it from Applications
+
+> The macOS build is **signed and notarized by Apple**, so it opens normally
+> with no Gatekeeper warning.
 
 ---
 
-### Mac
+## Staying up to date
 
-**Step 1 — Download the correct version for your Mac**
+Hana can update itself from **About → Updates**:
 
-Click the Apple menu → **About This Mac** to check your chip:
-- **Apple M1 / M2 / M3 / M4** → download the file ending in `arm64.dmg`
-- **Intel** → download the standard `.dmg` file
+- Click **Check for Updates**. If a newer version exists, choose **Download**,
+  then **Install & Restart**.
+- Nothing happens automatically by default. An opt-in **"Automatically check
+  for updates on startup"** toggle is available and defaults **off**, so the
+  app makes no update request unless you ask it to.
 
-**Step 2 — Open the DMG**
+Update security:
 
-Double-click the downloaded `.dmg` file. A window appears showing the
-Hana icon and an Applications folder shortcut.
-
-**Step 3 — Drag to Applications**
-
-Drag the Hana icon onto the Applications folder.
-
-**Step 4 — First launch (important)**
-
-Because Hana is not yet notarized with Apple, macOS will block it on
-first launch. Here is how to open it:
-
-**Method A — Right-click (easiest):**
-1. Open **Finder → Applications**
-2. Find **Hana - Network Utility**
-3. **Right-click** it → click **Open**
-4. Click **Open** in the dialog that appears
-5. Hana will launch and remember your choice permanently
-
-**Method B — Privacy & Security settings:**
-1. Try to open Hana normally — macOS will show a warning
-2. Go to **Apple menu → System Settings → Privacy & Security**
-3. Scroll down to find the message about Hana being blocked
-4. Click **Open Anyway**
-5. Enter your Mac password if prompted
-
-> **Why does this happen?** macOS Gatekeeper requires apps to be notarized
-> with an Apple Developer certificate. Hana is a free open source tool and
-> notarization is being added in a future release. The app is completely
-> safe — you can inspect the full source code on this page.
-
----
+- The update feed is **pinned** to this GitHub repository — the app never
+  follows an arbitrary or network-supplied URL.
+- Every download is **integrity-checked (SHA-512)** against the signed release
+  metadata before it is installed; on macOS the update must also carry a valid
+  Apple signature.
+- **Downgrade-protected** — the updater will never replace your build with an
+  older or pre-release version.
 
 ---
 
 ## Privacy & Security
 
-Hana collects **no data** of any kind. It makes outbound network requests
-only when you explicitly trigger them:
+Hana collects **no data** of any kind and makes **no background network
+connections**. Outbound requests happen only when you explicitly trigger them:
 
 - Ping and traceroute packets to hosts you specify
-- IP geolocation queries via [ip-api.com](http://ip-api.com) (IP Info module)
-- WhoIs queries via public RDAP and WhoIs services
-- Public IP detection via [ipify.org](https://api.ipify.org)
+- DNS queries to the resolver you choose (DNS Lookup)
+- TCP connection attempts to hosts/ports you scan (Port Scanner)
+- IP geolocation via [ipinfo.io](https://ipinfo.io) and public-IP detection via
+  [ipify.org](https://api.ipify.org) (IP Info)
+- WhoIs queries via public RDAP ([rdap.org](https://rdap.org)) and WhoIs services
+- Update checks to GitHub Releases — only when you click **Check for Updates**,
+  or if you enable the opt-in startup check (off by default)
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy and
 [SECURITY.md](SECURITY.md) for how to report vulnerabilities.
@@ -199,8 +221,10 @@ you test. See [TERMS.md](TERMS.md) for the full terms of use.
 git clone https://github.com/Proxy-IT/hana-network-utility.git
 cd hana-network-utility
 npm install
-npm start            # run in development mode
-npm run build        # produce installer in dist/
+npm start              # run in development mode (Vite + Electron)
+npm test               # run the Vitest suite
+npm run check:ipc      # verify the renderer ↔ preload ↔ main IPC contract
+npm run build          # produce an installer in dist/
 ```
 
 ---
@@ -209,13 +233,17 @@ npm run build        # produce installer in dist/
 
 | Version | Highlights |
 |---|---|
-| v1.8.0 | Migrated build toolchain from Create React App to Vite; added unit test suite (88 assertions); tightened production CSP; Node.js requirement raised to v22 |
-| v1.7.2 | In-app feedback channel (Report a Bug / Request a Feature); hardened the open-external handler |
-| v1.7.1 | Persistent module state, real-time ping results, accurate unreachable detection, npm start fix |
-| v1.4.0 | First-launch disclaimer, About page, sidebar logo, openExternal links |
-| v1.3.0 | Multi-Ping monitor for up to 5 hosts, IP Info & WhoIs module with full export |
-| v1.2.0 | Rebranded to Hana, CSV/TXT export on all tools, redesigned subnet sweep results |
-| v1.1.0 | Continuous ping with live RTT graph, in-app instructions, Windows path fixes |
+| v1.9.0 | In-app auto-updater — manual check plus opt-in startup check (off by default); downloads are SHA-512-verified, feed-pinned to GitHub, and downgrade-protected |
+| v1.8.2 | Security & reliability hardening — CSV formula-injection protection, unified CSV escaping, Port Scanner cancellation, Traceroute/Port Scanner cleanup on tab switch, dead-code removal |
+| v1.8.1 | Real branding — app icons (Windows & macOS), in-app logo, favicon, and landing-page assets |
+| v1.8.0 | Migrated build toolchain from Create React App to Vite; added a unit test suite; tightened production CSP; Node.js requirement raised to v22 |
+| v1.7.2 | In-app feedback channel (Report a Bug / Request a Feature); macOS code signing & notarization; hardened the open-external handler |
+| v1.7.0 | Electron 42 upgrade; main-process input validation across every module; per-request DNS resolver isolation; subnet-sweep reliability fixes |
+| v1.6.5 | DNS Lookup and Port Scanner modules; CIDR subnet sweep; shell-injection fix; Clear buttons |
+| v1.5.0 | Persistent module state, real-time ping results, accurate unreachable detection |
+| v1.3.0 | Multi-Ping monitor for up to 5 hosts; IP Info & WhoIs module with full export |
+| v1.2.0 | Rebranded to Hana; CSV/TXT export on all tools; redesigned subnet sweep results |
+| v1.1.0 | Continuous ping with live RTT graph; in-app instructions; Windows path fixes |
 | v1.0.0 | Initial release |
 
 See [CHANGELOG.md](CHANGELOG.md) for full patch notes.

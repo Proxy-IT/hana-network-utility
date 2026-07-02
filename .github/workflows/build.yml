@@ -58,14 +58,19 @@ jobs:
       - name: Verify no dev-only dependencies shipped
         shell: bash
         run: |
+          # Match dev/build-tooling package names specifically — electron-updater
+          # and its runtime deps are a legitimate production dependency and DO ship
+          # inside app.asar, so we can no longer reject any node_modules path. The
+          # leading "." matches either path separator (/ on macOS, \ on Windows).
+          DEV_DEPS='node_modules.(vite|vitest|@vitejs|@vitest|electron-builder|react-scripts|wait-on|cross-env|concurrently|react).'
           FOUND_ANY=0
           while IFS= read -r -d '' ASAR; do
             FOUND_ANY=1
             echo "Inspecting $ASAR"
             npx --yes asar list "$ASAR" > asar-contents.txt
-            if grep -qE "node_modules|react-scripts|wait-on|cross-env" asar-contents.txt; then
+            if grep -qE "$DEV_DEPS" asar-contents.txt; then
               echo "ERROR: dev-only dependencies found inside $ASAR"
-              grep -E "node_modules|react-scripts|wait-on|cross-env" asar-contents.txt | head -n 20
+              grep -E "$DEV_DEPS" asar-contents.txt | head -n 20
               exit 1
             fi
           done < <(find dist -name "app.asar" -print0)
@@ -146,14 +151,19 @@ jobs:
 
       - name: Verify no dev-only dependencies shipped
         run: |
+          # Match dev/build-tooling package names specifically — electron-updater
+          # and its runtime deps are a legitimate production dependency and DO ship
+          # inside app.asar, so we can no longer reject any node_modules path. The
+          # leading "." matches either path separator (/ on macOS, \ on Windows).
+          DEV_DEPS='node_modules.(vite|vitest|@vitejs|@vitest|electron-builder|react-scripts|wait-on|cross-env|concurrently|react).'
           FOUND_ANY=0
           while IFS= read -r -d '' ASAR; do
             FOUND_ANY=1
             echo "Inspecting $ASAR"
             npx --yes asar list "$ASAR" > asar-contents.txt
-            if grep -qE "node_modules|react-scripts|wait-on|cross-env" asar-contents.txt; then
+            if grep -qE "$DEV_DEPS" asar-contents.txt; then
               echo "ERROR: dev-only dependencies found inside $ASAR"
-              grep -E "node_modules|react-scripts|wait-on|cross-env" asar-contents.txt | head -n 20
+              grep -E "$DEV_DEPS" asar-contents.txt | head -n 20
               exit 1
             fi
           done < <(find dist -name "app.asar" -print0)

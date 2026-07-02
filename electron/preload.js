@@ -64,6 +64,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('sweep-stopped');
   },
 
+  // Auto-updater
+  checkForUpdate:     ()  => ipcRenderer.send('update-check'),
+  downloadUpdate:     ()  => ipcRenderer.send('update-download'),
+  installUpdate:      ()  => ipcRenderer.send('update-install'),
+  getUpdateState:     ()  => ipcRenderer.invoke('update-get-state'),
+  setUpdateAutoCheck: (v) => ipcRenderer.invoke('update-set-auto-check', v),
+  onUpdateChecking:     (cb) => ipcRenderer.on('update-checking',          ()     => cb()),
+  onUpdateAvailable:    (cb) => ipcRenderer.on('update-available',         (_, d) => cb(d)),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available',     (_, d) => cb(d)),
+  onUpdateProgress:     (cb) => ipcRenderer.on('update-download-progress', (_, d) => cb(d)),
+  onUpdateDownloaded:   (cb) => ipcRenderer.on('update-downloaded',        (_, d) => cb(d)),
+  onUpdateError:        (cb) => ipcRenderer.on('update-error',             (_, d) => cb(d)),
+  removeUpdateListeners: () => {
+    ipcRenderer.removeAllListeners('update-checking');
+    ipcRenderer.removeAllListeners('update-available');
+    ipcRenderer.removeAllListeners('update-not-available');
+    ipcRenderer.removeAllListeners('update-download-progress');
+    ipcRenderer.removeAllListeners('update-downloaded');
+    ipcRenderer.removeAllListeners('update-error');
+  },
+
   // System info
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
 

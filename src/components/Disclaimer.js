@@ -71,7 +71,9 @@ export default function Disclaimer({ onAccept }) {
             <p style={s.text}>
               Hana collects no personal data, telemetry, or usage information
               of any kind. Outbound network requests are made only when you
-              explicitly trigger them within the app.
+              explicitly trigger them within the app. This includes update
+              checks — the automatic-startup-check option is a toggle in
+              About → Updates and is <strong>off by default</strong>.
             </p>
           </div>
 

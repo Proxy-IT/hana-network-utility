@@ -5,3 +5,5 @@ build/
 *.log
 .DS_Store
 .claude/
+# dev-only auto-update test config (points updater at the real GitHub feed)
+dev-app-update.yml

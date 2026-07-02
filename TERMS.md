@@ -43,4 +43,7 @@ jurisdictions and may result in criminal prosecution.
 
 ## Contact
 
-To report misuse or security concerns contact: [your email]
+To report misuse or security concerns, contact: zoran@proxy-it.co
+
+For security vulnerabilities specifically, see [SECURITY.md](SECURITY.md)
+for the full reporting process.
