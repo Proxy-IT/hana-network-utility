@@ -160,6 +160,27 @@ thousands of entries.
 
 ---
 
+## v1.9.2 — July 2026
+
+### Fixed — macOS auto-update was broken
+
+Real cross-platform testing of the v1.9.0 auto-updater surfaced a genuine
+bug: checking for updates on macOS failed with `ZIP file not provided`.
+electron-updater's macOS updater (`MacUpdater`) requires a `.zip` release
+asset specifically — the `.dmg` alone (our only mac build target) isn't
+enough, even though it's the correct format for a fresh manual install.
+Added `zip` as a second mac build target (`x64` and `arm64`, alongside the
+existing `dmg`), so both are published to each release going forward. No
+CI workflow changes were needed — electron-builder auto-publishes whatever
+targets are configured directly during the build step when running on a
+tagged commit in CI (confirmed by reading `PublishManager.js`), the same
+mechanism that already publishes `latest.yml`/`latest-mac.yml` today.
+
+Mac users on v1.9.0 or v1.9.1 should update via a manual download this one
+time; v1.9.2 onward will auto-update correctly on both platforms.
+
+---
+
 ## v1.9.1 — July 2026
 
 ### Subnet Sweep — CIDR is now the default mode
