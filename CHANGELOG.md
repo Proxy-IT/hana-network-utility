@@ -160,6 +160,24 @@ thousands of entries.
 
 ---
 
+## v1.9.1 — July 2026
+
+### Subnet Sweep — CIDR is now the default mode
+
+Opening Subnet Sweep previously landed on **Range** mode, requiring a click
+to switch to **CIDR** for anything beyond a plain host-range scan. CIDR now
+loads first — both as the default state and as the first (left-most) option
+in the mode toggle, with Range as the second option. Better usability for
+the more commonly useful scan type.
+
+### About page — persistent "Patch notes" link
+
+Added a link next to the current version in **About → Updates** that opens
+this project's GitHub Releases page, so patch notes can be checked at any
+time — not just when an update has already been found.
+
+---
+
 ## v1.9.0 — July 2026
 
 ### In-app auto-updater

@@ -26,7 +26,7 @@ export const defaultSweepState = {
   start:        '1',
   end:          '50',
   cidr:         '192.168.1.0/24',
-  mode:         'range',   // 'range' or 'cidr'
+  mode:         'cidr',    // 'range' or 'cidr' — CIDR is the default; better usability for most subnet sweeps
   running:      false,
   results:      [],
   done:         false,
@@ -226,13 +226,13 @@ export default function SubnetSweep({ state, setState }) {
       {/* Mode toggle */}
       <div style={s.modeRow}>
         <div style={s.modeToggle}>
-          <button style={{ ...s.modeBtn, ...(mode === 'range' ? s.modeBtnActive : {}) }}
-            onClick={() => !running && setMode('range')} disabled={running}>
-            Range
-          </button>
           <button style={{ ...s.modeBtn, ...(mode === 'cidr' ? s.modeBtnActive : {}) }}
             onClick={() => !running && setMode('cidr')} disabled={running}>
             CIDR
+          </button>
+          <button style={{ ...s.modeBtn, ...(mode === 'range' ? s.modeBtnActive : {}) }}
+            onClick={() => !running && setMode('range')} disabled={running}>
+            Range
           </button>
         </div>
         <span style={s.modeHint}>

@@ -230,6 +230,7 @@ function UpdatesSection() {
           <div style={us.verBlock}>
             <span style={us.verLabel}>Current version</span>
             <span style={us.verValue}>v{version || (isBrowser ? '—' : '…')}</span>
+            <button style={us.patchNotesLink} onClick={() => openLink(`${REPO}/releases`)}>Patch notes ↗</button>
           </div>
           {status === 'available' ? (
             <button style={us.primaryBtn} onClick={() => window.electronAPI.downloadUpdate()}>
@@ -298,6 +299,7 @@ const us = {
   verBlock: { display: 'flex', flexDirection: 'column', gap: 3 },
   verLabel: { fontSize: 10, color: '#3D4D65', textTransform: 'uppercase', letterSpacing: '0.1em' },
   verValue: { fontSize: 18, fontWeight: 600, color: '#E8EDF5', fontFamily: 'JetBrains Mono, monospace' },
+  patchNotesLink: { background: 'transparent', border: 'none', color: '#00D4FF', cursor: 'pointer', fontSize: 11, padding: 0, marginTop: 2, textAlign: 'left', fontFamily: 'Inter, sans-serif' },
   checkBtn: { background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)', color: '#00D4FF', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 },
   primaryBtn: { background: 'rgba(0,255,156,0.12)', border: '1px solid rgba(0,255,156,0.35)', color: '#00FF9C', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' },
   btnOff: { opacity: 0.4, cursor: 'not-allowed' },
