@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { openLink } from '../utils/openLink';
 
 const isBrowser = !window.electronAPI;
 
@@ -18,6 +19,7 @@ const MODULES = [
   { icon: '◈', name: 'DNS Lookup',    desc: 'Resolve A, AAAA, CNAME, MX, TXT, NS, PTR records using any DNS server' },
   { icon: '⊘', name: 'Port Scanner',  desc: 'TCP port scanner with common port presets and group selection' },
   { icon: '≋', name: 'Latency Guide', desc: 'Reference tiers and per-application latency thresholds' },
+  { icon: '↗', name: "Hana's Favs",   desc: 'Curated, credited links to free SSL, MAC, BGP, and security lookup tools' },
 ];
 
 const LINKS = [
@@ -27,14 +29,6 @@ const LINKS = [
   { label: 'Terms of Use',      url: 'https://github.com/Proxy-IT/hana-network-utility/blob/main/TERMS.md' },
   { label: 'Privacy Policy',    url: 'https://github.com/Proxy-IT/hana-network-utility/blob/main/PRIVACY.md' },
 ];
-
-function openLink(url) {
-  if (window.electronAPI?.openExternal) {
-    window.electronAPI.openExternal(url);
-  } else {
-    window.open(url, '_blank');
-  }
-}
 
 const REPO = 'https://github.com/Proxy-IT/hana-network-utility';
 

@@ -160,6 +160,63 @@ thousands of entries.
 
 ---
 
+## v1.10.0 — July 2026
+
+### New module — Hana's Favs
+
+A tenth module: a curated, static directory of free third-party network and
+security tools, grouped by category and credited to each operator.
+
+- **SSL / TLS** — SSL Server Test (Qualys SSL Labs), crt.sh (Sectigo,
+  Certificate Transparency log search)
+- **MAC / Hardware** — MAC Address Lookup (MacVendors)
+- **BGP / Routing** — BGP Toolkit (Hurricane Electric)
+- **Availability / Performance** — Down for Everyone or Just Me, Speedtest
+  (Ookla)
+- **Security** — Have I Been Pwned (Troy Hunt)
+
+**Security properties, by design:**
+- The link list is a hardcoded, static array (`src/utils/usefulLinks.js`) —
+  not fetched from any remote source, not user-editable, and not built from
+  any dynamic or user-supplied input. Every URL was reviewed by hand.
+- New automated tests (`usefulLinks.test.js`) permanently guard the data:
+  every URL must be `https://`, must parse as a well-formed URL, the domain
+  shown on each card must match the URL's actual hostname (so a card can't
+  show one destination while linking to another), and no duplicate URLs.
+- No new IPC surface — clicking a card reuses the existing `openExternal`
+  channel (already hardened to http/https-only in `electron/main.js`), so
+  the IPC contract and CSP are both unaffected.
+- Extracted the "open link safely" helper (previously duplicated only in
+  `About.js`) into a shared `src/utils/openLink.js`, used by both — a single
+  reviewed copy for a security-relevant function instead of copies that can
+  drift apart. Also added `noopener,noreferrer` to the browser-preview
+  fallback path, which the original didn't have.
+- Attribution is neutral ("by <Provider>") — names each tool's operator
+  without implying their endorsement of Hana.
+- `PRIVACY.md` updated with a dedicated section: clicking a card opens the
+  user's default browser: this is not a request Hana itself makes, and
+  Hana doesn't track which links are clicked.
+
+**Found and fixed during review** — this module went through an 8-angle
+multi-agent review (line-by-line, removed-behavior, cross-file, reuse,
+simplification, efficiency, altitude, plus direct verification against the
+real files) before release. Two angles came back clean on their own; one
+finding was disproven by re-reading the actual code (a claimed "styles
+object recreated every render" turned out to be module-level, like every
+other component). Three real, low-severity items were found and fixed:
+- `openLink.js` only re-validated the URL scheme on the Electron path — the
+  browser-preview fallback (`window.open`) had no check of its own, so the
+  two paths could silently diverge in safety. `openLink()` now validates
+  the scheme itself (https/http only) before picking either transport, and
+  gained its first unit test suite (`openLink.test.js`, 7 assertions, 100%
+  branch coverage), closing a real test-coverage gap the review found.
+- Removed a dead CSS transition on the link cards (`border-color`) that
+  nothing ever triggered — verified against the app's global stylesheet.
+- Removed a redundant `marginTop` that duplicated spacing already provided
+  by the parent's flex `gap`.
+
+---
+
 ## v1.9.2 — July 2026
 
 ### Fixed — macOS auto-update was broken

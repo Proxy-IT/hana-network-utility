@@ -25,7 +25,7 @@ The name Hana (ханa) means "flower" in Bosnian — something small, purposefu
 and built with care. That philosophy carries through to every part of the app:
 lightweight installer, clean interface, instant results.
 
-It ships nine modules in a single window, runs on Windows and macOS, collects
+It ships ten modules in a single window, runs on Windows and macOS, collects
 no data, and can keep itself up to date.
 
 ---
@@ -118,6 +118,16 @@ A built-in reference for understanding what your ping results actually mean.
 - Per-application thresholds for gaming, VoIP, video conferencing,
   web browsing, database queries, and CDN delivery
 - Live classifier — type any ms value to instantly see its rating
+
+### ↗ Hana's Favs
+A curated, credited directory of free third-party network and security tools.
+
+- Grouped by category: SSL/TLS, MAC/hardware, BGP/routing,
+  availability/performance, and security
+- Each card is a static, built-in link — nothing here is fetched or
+  editable — credited to its operator (e.g. Qualys SSL Labs, Ookla)
+- Clicking opens the site in your default browser; Hana never contacts
+  these services on its own
 
 ---
 
@@ -233,6 +243,9 @@ npm run build          # produce an installer in dist/
 
 | Version | Highlights |
 |---|---|
+| v1.10.0 | Hana's Favs — a curated, credited directory of free SSL/TLS, MAC, BGP, and security lookup tools |
+| v1.9.2 | Fixed macOS auto-update (electron-updater requires a `.zip` release asset; the mac build previously only produced a `.dmg`) |
+| v1.9.1 | Subnet Sweep now defaults to CIDR mode (was Range); added a persistent "Patch notes" link in About → Updates |
 | v1.9.0 | In-app auto-updater — manual check plus opt-in startup check (off by default); downloads are SHA-512-verified, feed-pinned to GitHub, and downgrade-protected |
 | v1.8.2 | Security & reliability hardening — CSV formula-injection protection, unified CSV escaping, Port Scanner cancellation, Traceroute/Port Scanner cleanup on tab switch, dead-code removal |
 | v1.8.1 | Real branding — app icons (Windows & macOS), in-app logo, favicon, and landing-page assets |

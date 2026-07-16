@@ -10,6 +10,7 @@ import IpInfo from './components/IpInfo';
 import About from './components/About';
 import DnsLookup from './components/DnsLookup';
 import PortScanner from './components/PortScanner';
+import UsefulLinks from './components/UsefulLinks';
 import Disclaimer, { hasAccepted } from './components/Disclaimer';
 
 const style = document.createElement('style');
@@ -55,6 +56,7 @@ export default function App() {
       case 'dns':       return <DnsLookup />;
       case 'ports':     return <PortScanner />;
       case 'latency':   return <LatencyGuide />;
+      case 'links':     return <UsefulLinks />;
       case 'about':     return <About />;
       default:          return <PingTool state={pingState} setState={setPingState} />;
     }

@@ -22,6 +22,11 @@ of the user:
   below) — **only when you click "Check for Updates," or if you have
   separately turned on the optional startup-check setting**
 
+Separately, **Hana's Favs** (see below) opens a link in your default web
+browser when you click one — this is not a request Hana itself makes; your
+browser handles it independently, outside of Hana's process, the same as
+clicking any link on a web page.
+
 No data from any of these requests is stored or transmitted to the developer.
 
 ## Automatic Updates
@@ -48,6 +53,22 @@ Hana can check GitHub for a newer version from **About → Updates**.
   and then **Install & Restart** yourself — a found update is only
   announced, never applied automatically.
 
+## Hana's Favs
+
+Hana's Favs is a static, built-in directory of free third-party network and
+security tools (SSL/TLS testers, MAC address lookup, BGP/routing lookup,
+uptime checkers, and breach-check tools) — credited to their operators on
+each card.
+
+- The list is fixed at build time. It is not downloaded, fetched, or
+  updated remotely, and nothing in it is user-editable.
+- Clicking a card opens that site in your default web browser. Hana does
+  not send any data to these sites, does not track which links you click,
+  and does not contact any of them on its own — the only network activity
+  is your browser's, after you've explicitly clicked.
+- These are independent services, not affiliated with or endorsed by Hana.
+  Once you leave to their site, their own privacy policy applies.
+
 ## Third party services
 
 Hana's modules use these services only when you use the corresponding
@@ -59,6 +80,16 @@ feature:
 - **api.whois.vu** — for raw WhoIs data (IP Info module)
 - **github.com** — to check for and download app updates, only when you
   trigger a check as described above
+
+Hana's Favs links to (only when you click a card):
+
+- **ssllabs.com** (Qualys SSL Labs) — SSL/TLS server configuration testing
+- **crt.sh** (Sectigo) — Certificate Transparency log search
+- **macvendors.com** (MacVendors) — MAC address to manufacturer lookup
+- **bgp.he.net** (Hurricane Electric) — BGP/ASN routing lookup
+- **downforeveryoneorjustme.com** — site availability checker
+- **speedtest.net** (Ookla) — internet connection speed test
+- **haveibeenpwned.com** (Troy Hunt) — data breach lookup
 
 Please review their respective privacy policies for information on
 how they handle queries.

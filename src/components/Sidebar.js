@@ -10,6 +10,7 @@ const TABS = [
   { id: 'dns',       label: 'DNS Lookup',    icon: '◈' },
   { id: 'ports',     label: 'Port Scanner',  icon: '⊘' },
   { id: 'latency',   label: 'Latency Guide', icon: '≋' },
+  { id: 'links',     label: "Hana's Favs",   icon: '↗' },
 ];
 
 export default function Sidebar({ active, onSelect, sysInfo }) {

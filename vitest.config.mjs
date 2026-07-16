@@ -24,6 +24,15 @@ import { defineConfig } from 'vitest/config';
  *   - src/utils/latency.js      (classifyLatency; LATENCY_TIERS and
  *                                 USE_CASE_THRESHOLDS are static data, not logic)
  *   - src/utils/parsers.js      (parseTracerouteLines)
+ *   - src/utils/openLink.js     (openLink — the http(s)-only gate every
+ *                                 outbound link passes through; tests stub
+ *                                 `window` via vi.stubGlobal since this suite
+ *                                 runs in the 'node' environment, not jsdom)
+ *
+ * src/utils/usefulLinks.js is deliberately NOT in this list — like
+ * LATENCY_TIERS/USE_CASE_THRESHOLDS above, LINK_CATEGORIES is static data,
+ * not logic. Its own test file (usefulLinks.test.js) validates the data's
+ * shape and safety properties directly rather than through a coverage %.
  *
  * Partially covered:
  *   - src/utils/export.js       (only buildSweepReport, extracted from
@@ -79,6 +88,7 @@ export default defineConfig({
         'src/utils/subnet.js',
         'src/utils/latency.js',
         'src/utils/parsers.js',
+        'src/utils/openLink.js',
         // export.js deliberately NOT listed — only ~1/13 functions are
         // tested, so an 80% threshold against the whole file would be
         // dishonest. Add it back once the other 11 functions are refactored
