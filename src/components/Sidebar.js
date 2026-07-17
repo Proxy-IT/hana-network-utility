@@ -3,14 +3,15 @@ import React from 'react';
 const TABS = [
   { id: 'ping',      label: 'Ping',          icon: '◎' },
   { id: 'multiping', label: 'Multi-Ping',    icon: '⊛' },
+  { id: 'tcpping',   label: 'TCP Ping',      icon: '⇄' },
+  { id: 'ports',     label: 'Port Scanner',  icon: '⊘' },
   { id: 'tracert',   label: 'Traceroute',    icon: '⤵' },
   { id: 'sweep',     label: 'Subnet Sweep',  icon: '⊞' },
   { id: 'subnet',    label: 'Subnet Calc',   icon: '⊟' },
-  { id: 'ipinfo',    label: 'IP Info',       icon: '⊕' },
   { id: 'dns',       label: 'DNS Lookup',    icon: '◈' },
-  { id: 'ports',     label: 'Port Scanner',  icon: '⊘' },
-  { id: 'latency',   label: 'Latency Guide', icon: '≋' },
+  { id: 'ipinfo',    label: 'IP Info',       icon: '⊕' },
   { id: 'links',     label: "Hana's Favs",   icon: '↗' },
+  { id: 'latency',   label: 'Latency Guide', icon: '≋' },
 ];
 
 export default function Sidebar({ active, onSelect, sysInfo }) {

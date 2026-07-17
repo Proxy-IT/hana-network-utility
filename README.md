@@ -25,7 +25,7 @@ The name Hana (ханa) means "flower" in Bosnian — something small, purposefu
 and built with care. That philosophy carries through to every part of the app:
 lightweight installer, clean interface, instant results.
 
-It ships ten modules in a single window, runs on Windows and macOS, collects
+It ships eleven modules in a single window, runs on Windows and macOS, collects
 no data, and can keep itself up to date.
 
 ---
@@ -49,6 +49,28 @@ Monitor up to 5 hosts simultaneously on a single screen.
 - Global status bar shows total up vs down count instantly
 - Hosts keep pinging in the background while you use other modules
 - Designed for watching devices come back online after a reboot or failover
+
+### ⇄ TCP Ping
+Repeatedly probe a specific host:port — the complement to ICMP ping for when
+a firewall blocks pings but the service you care about is still reachable.
+
+- Per-attempt phase timing: DNS resolution, TCP connect, and (optional)
+  TLS handshake, each broken out separately
+- Explicit failure classification instead of a single pass/fail — refused,
+  timed out, unreachable, DNS failure, and TLS failure are all shown distinctly
+- **Fixed mode** (5–100 attempts) or **Continuous mode** with a live timing graph
+- Min/avg/max, packet loss, jitter, and longest-failure-streak stats
+- Export the full attempt log and summary as `.txt` or `.csv`
+
+### ⊘ Port Scanner
+Check which TCP ports are open, closed, or filtered on a host.
+
+- 24 common ports as selectable chips, plus Web / Remote / Mail / Database /
+  Network group presets and a custom-port field
+- Open (green), Closed (gray), and Filtered (amber) results with service names
+- **Stop** cancels a running scan at any time
+- A mandatory authorization checkbox must be confirmed before scanning is enabled
+- Export results as `.txt` or `.csv`
 
 ### ⤵ Traceroute
 Trace the exact network path your traffic takes to reach any destination.
@@ -80,6 +102,16 @@ Instant CIDR subnet math — no mental arithmetic required.
 - Binary representation with network bits highlighted
 - Updates in real time as you adjust the prefix
 
+### ◈ DNS Lookup
+Resolve DNS records for any hostname or IP address.
+
+- Supports A, AAAA, CNAME, MX, TXT, NS, and PTR records — or **ALL** at once
+- Choose a resolver: Google (8.8.8.8), Cloudflare (1.1.1.1), or a custom server
+- Automatic reverse (PTR) lookup when you enter an IP address
+- Color-coded record badges with TTL and MX priority
+- Each request uses an isolated resolver — no global DNS state is mutated
+- Export results as `.txt` or `.csv`
+
 ### ⊕ IP Info & WhoIs
 Three tools in one tab — no browser required.
 
@@ -91,34 +123,6 @@ Three tools in one tab — no browser required.
   including registrar, creation and expiry dates, and name servers
 - All three sections export to `.txt` and `.csv`
 
-### ◈ DNS Lookup
-Resolve DNS records for any hostname or IP address.
-
-- Supports A, AAAA, CNAME, MX, TXT, NS, and PTR records — or **ALL** at once
-- Choose a resolver: Google (8.8.8.8), Cloudflare (1.1.1.1), or a custom server
-- Automatic reverse (PTR) lookup when you enter an IP address
-- Color-coded record badges with TTL and MX priority
-- Each request uses an isolated resolver — no global DNS state is mutated
-- Export results as `.txt` or `.csv`
-
-### ⊘ Port Scanner
-Check which TCP ports are open, closed, or filtered on a host.
-
-- 24 common ports as selectable chips, plus Web / Remote / Mail / Database /
-  Network group presets and a custom-port field
-- Open (green), Closed (gray), and Filtered (amber) results with service names
-- **Stop** cancels a running scan at any time
-- A mandatory authorization checkbox must be confirmed before scanning is enabled
-- Export results as `.txt` or `.csv`
-
-### ≋ Latency Guide
-A built-in reference for understanding what your ping results actually mean.
-
-- Latency tier table from loopback (< 1ms) through satellite (> 700ms)
-- Per-application thresholds for gaming, VoIP, video conferencing,
-  web browsing, database queries, and CDN delivery
-- Live classifier — type any ms value to instantly see its rating
-
 ### ↗ Hana's Favs
 A curated, credited directory of free third-party network and security tools.
 
@@ -128,6 +132,14 @@ A curated, credited directory of free third-party network and security tools.
   editable — credited to its operator (e.g. Qualys SSL Labs, Ookla)
 - Clicking opens the site in your default browser; Hana never contacts
   these services on its own
+
+### ≋ Latency Guide
+A built-in reference for understanding what your ping results actually mean.
+
+- Latency tier table from loopback (< 1ms) through satellite (> 700ms)
+- Per-application thresholds for gaming, VoIP, video conferencing,
+  web browsing, database queries, and CDN delivery
+- Live classifier — type any ms value to instantly see its rating
 
 ---
 
@@ -243,6 +255,7 @@ npm run build          # produce an installer in dist/
 
 | Version | Highlights |
 |---|---|
+| v1.11.0 | TCP Ping — repeated TCP-connect probing of a host:port with DNS/connect/TLS phase timing, failure classification, jitter, and failure-streak tracking; sidebar module order regrouped by category |
 | v1.10.0 | Hana's Favs — a curated, credited directory of free SSL/TLS, MAC, BGP, and security lookup tools |
 | v1.9.2 | Fixed macOS auto-update (electron-updater requires a `.zip` release asset; the mac build previously only produced a `.dmg`) |
 | v1.9.1 | Subnet Sweep now defaults to CIDR mode (was Range); added a persistent "Patch notes" link in About → Updates |

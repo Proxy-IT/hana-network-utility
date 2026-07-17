@@ -95,6 +95,19 @@ export function validatePingCount(count) {
   return null;
 }
 
+/**
+ * Validates a TCP Ping connect/TLS-handshake timeout, in milliseconds.
+ * @param {number|string} ms
+ * @returns {string|null} error message or null
+ */
+export function validateTcpPingTimeout(ms) {
+  const n = parseInt(ms, 10);
+  if (isNaN(n) || n < 200 || n > 10000) {
+    return 'Timeout must be between 200 and 10000 ms.';
+  }
+  return null;
+}
+
 // ── CommonJS re-export for electron/main.js (which uses require()) ────────────
 // When imported via require() in main.js, module.exports is used.
 // When imported via ES import in src/, the named exports above are used.
@@ -106,5 +119,6 @@ if (typeof module !== 'undefined' && module.exports) {
     VALID_DNS_TYPES,
     validatePorts,
     validatePingCount,
+    validateTcpPingTimeout,
   };
 }

@@ -122,6 +122,73 @@ export function exportPingCsv({ host, output, samples, liveStats, continuous }) 
   downloadFile(`ping_${host}_${timestamp()}.csv`, csv, 'text/csv');
 }
 
+// ── TCP PING exports ──────────────────────────────────────────────────────────
+
+export function exportTcpPingTxt({ host, port, useTls, attempts, stats }) {
+  const ts = new Date().toLocaleString();
+  const lines = [
+    '========================================',
+    '  Hana - Network Utility',
+    '  TCP Ping Report',
+    '========================================',
+    `Host       : ${host}`,
+    `Port       : ${port}`,
+    `TLS        : ${useTls ? 'Yes' : 'No'}`,
+    `Timestamp  : ${ts}`,
+    '',
+  ];
+
+  if (stats) {
+    lines.push('--- Summary ---');
+    lines.push(`Attempts Sent      : ${stats.sent}`);
+    lines.push(`Attempts Failed    : ${stats.lost}`);
+    lines.push(`Loss               : ${stats.loss}%`);
+    lines.push(`Min RTT            : ${stats.min != null ? stats.min + ' ms' : 'N/A'}`);
+    lines.push(`Avg RTT            : ${stats.avg != null ? stats.avg + ' ms' : 'N/A'}`);
+    lines.push(`Max RTT            : ${stats.max != null ? stats.max + ' ms' : 'N/A'}`);
+    lines.push(`Jitter             : ${stats.jitter != null ? stats.jitter + ' ms' : 'N/A'}`);
+    lines.push(`Longest Fail Streak: ${stats.longestFailStreak}`);
+    lines.push('');
+  }
+
+  lines.push('--- Attempt Log ---');
+  lines.push('Seq    Status       DNS_ms     Connect_ms TLS_ms     Total_ms   Error');
+  lines.push('------ ------------ ---------- ---------- ---------- ---------- -----------');
+  attempts.forEach(a => {
+    const seq  = String(a.seq).padEnd(6);
+    const stat = String(a.status).padEnd(12);
+    const dns  = (a.dnsMs     != null ? String(a.dnsMs)     : '-').padEnd(10);
+    const conn = (a.connectMs != null ? String(a.connectMs) : '-').padEnd(10);
+    const tls  = (a.tlsMs     != null ? String(a.tlsMs)     : '-').padEnd(10);
+    const tot  = (a.totalMs   != null ? String(a.totalMs)   : '-').padEnd(10);
+    lines.push(`${seq} ${stat} ${dns} ${conn} ${tls} ${tot} ${a.error || ''}`);
+  });
+
+  downloadFile(`tcpping_${host}_${port}_${timestamp()}.txt`, lines.join('\n'));
+}
+
+export function exportTcpPingCsv({ host, port, useTls, attempts, stats }) {
+  const ts = new Date().toLocaleString();
+  const rows = [['Seq', 'Status', 'DNS_ms', 'Connect_ms', 'TLS_ms', 'Total_ms', 'Error', 'Host', 'Port', 'Timestamp']];
+  attempts.forEach(a => {
+    rows.push([a.seq, a.status, a.dnsMs ?? '', a.connectMs ?? '', a.tlsMs ?? '', a.totalMs ?? '', a.error || '', host, port, ts]);
+  });
+  if (stats) {
+    rows.push([]);
+    rows.push(['Summary']);
+    rows.push(['TLS', useTls ? 'Yes' : 'No']);
+    rows.push(['Sent', stats.sent]);
+    rows.push(['Lost', stats.lost]);
+    rows.push(['Loss_%', stats.loss]);
+    rows.push(['Min_ms', stats.min ?? '']);
+    rows.push(['Avg_ms', stats.avg ?? '']);
+    rows.push(['Max_ms', stats.max ?? '']);
+    rows.push(['Jitter_ms', stats.jitter ?? '']);
+    rows.push(['Longest_Fail_Streak', stats.longestFailStreak]);
+  }
+  downloadFile(`tcpping_${host}_${port}_${timestamp()}.csv`, toCsv(rows), 'text/csv');
+}
+
 // ── TRACEROUTE exports ────────────────────────────────────────────────────────
 
 export function exportTraceTxt({ host, hops }) {

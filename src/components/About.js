@@ -12,14 +12,15 @@ const APP_VERSION = __APP_VERSION__;
 const MODULES = [
   { icon: '◎', name: 'Ping',          desc: 'Fixed and continuous ping with live RTT graph and packet loss tracking' },
   { icon: '⊛', name: 'Multi-Ping',    desc: 'Monitor up to 5 hosts simultaneously — green when up, red when down' },
+  { icon: '⇄', name: 'TCP Ping',      desc: 'Repeated TCP-connect probing of a host:port with DNS/connect/TLS phase timing and failure classification' },
+  { icon: '⊘', name: 'Port Scanner',  desc: 'TCP port scanner with common port presets and group selection' },
   { icon: '⤵', name: 'Traceroute',    desc: 'Live hop-by-hop path tracing with color-coded latency per hop' },
   { icon: '⊞', name: 'Subnet Sweep',  desc: 'Ping-sweep a range or CIDR subnet to discover live hosts — supports /16 to /30' },
   { icon: '⊟', name: 'Subnet Calc',   desc: 'Full CIDR breakdown with network, host range, and binary view' },
-  { icon: '⊕', name: 'IP Info',       desc: 'Public IP, geolocation lookup, and WhoIs for any domain or IP' },
   { icon: '◈', name: 'DNS Lookup',    desc: 'Resolve A, AAAA, CNAME, MX, TXT, NS, PTR records using any DNS server' },
-  { icon: '⊘', name: 'Port Scanner',  desc: 'TCP port scanner with common port presets and group selection' },
-  { icon: '≋', name: 'Latency Guide', desc: 'Reference tiers and per-application latency thresholds' },
+  { icon: '⊕', name: 'IP Info',       desc: 'Public IP, geolocation lookup, and WhoIs for any domain or IP' },
   { icon: '↗', name: "Hana's Favs",   desc: 'Curated, credited links to free SSL, MAC, BGP, and security lookup tools' },
+  { icon: '≋', name: 'Latency Guide', desc: 'Reference tiers and per-application latency thresholds' },
 ];
 
 const LINKS = [

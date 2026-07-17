@@ -28,6 +28,11 @@ import { defineConfig } from 'vitest/config';
  *                                 outbound link passes through; tests stub
  *                                 `window` via vi.stubGlobal since this suite
  *                                 runs in the 'node' environment, not jsdom)
+ *   - src/lib/tcpPingClassify.js (classifyTcpError — hand-copied into
+ *                                 electron/main.js's tcpping-start handler;
+ *                                 pinned by mainValidatorParity.test.js)
+ *   - src/utils/tcpPingStats.js (computeJitter, longestFailureStreak,
+ *                                 computeTcpPingStats)
  *
  * src/utils/usefulLinks.js is deliberately NOT in this list — like
  * LATENCY_TIERS/USE_CASE_THRESHOLDS above, LINK_CATEGORIES is static data,
@@ -89,6 +94,8 @@ export default defineConfig({
         'src/utils/latency.js',
         'src/utils/parsers.js',
         'src/utils/openLink.js',
+        'src/lib/tcpPingClassify.js',
+        'src/utils/tcpPingStats.js',
         // export.js deliberately NOT listed — only ~1/13 functions are
         // tested, so an 80% threshold against the whole file would be
         // dishonest. Add it back once the other 11 functions are refactored

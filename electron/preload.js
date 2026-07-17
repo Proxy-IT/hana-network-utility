@@ -105,4 +105,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('portscan-done');
     ipcRenderer.removeAllListeners('portscan-error');
   },
+
+  // TCP Ping
+  startTcpPing:          (opts) => ipcRenderer.send('tcpping-start', opts),
+  stopTcpPing:           ()     => ipcRenderer.send('tcpping-stop'),
+  onTcpPingResult:       (cb)   => ipcRenderer.on('tcpping-result',  (_, d) => cb(d)),
+  onTcpPingDone:         (cb)   => ipcRenderer.on('tcpping-done',    (_, d) => cb(d)),
+  onTcpPingStopped:      (cb)   => ipcRenderer.on('tcpping-stopped', ()     => cb()),
+  onTcpPingError:        (cb)   => ipcRenderer.on('tcpping-error',   (_, d) => cb(d)),
+  removeTcpPingListeners: ()    => {
+    ipcRenderer.removeAllListeners('tcpping-result');
+    ipcRenderer.removeAllListeners('tcpping-done');
+    ipcRenderer.removeAllListeners('tcpping-stopped');
+    ipcRenderer.removeAllListeners('tcpping-error');
+  },
 });

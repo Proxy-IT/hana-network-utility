@@ -15,6 +15,11 @@ of the user:
 - Ping and traceroute packets sent to user-specified hosts
 - DNS queries sent to the resolver you choose (DNS Lookup module)
 - TCP connection attempts to the host/ports you scan (Port Scanner module)
+- Repeated TCP connection attempts, and an optional TLS handshake, to the
+  single host:port you specify (TCP Ping module) — the TLS handshake, if
+  enabled, is used only to measure whether it completes and how long it
+  takes; no data is sent or received beyond the handshake itself, and the
+  connection is closed immediately afterward
 - IP geolocation lookups via ipinfo.io (IP Info module)
 - WhoIs queries via public RDAP and WhoIs services (IP Info module)
 - Public IP detection via api.ipify.org (IP Info module)

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { validateHost, isValidIpv4, isValidIpv6, validatePorts, validatePingCount } from '../validate.js';
+import { validateHost, isValidIpv4, isValidIpv6, validatePorts, validatePingCount, validateTcpPingTimeout } from '../validate.js';
+import { classifyTcpError } from '../tcpPingClassify.js';
 
 /**
  * IMPORTANT — read before editing either file.
@@ -69,7 +70,11 @@ const HOST_TEST_INPUTS = [
 const IPV4_TEST_INPUTS = ['192.168.1.1', '0.0.0.0', '255.255.255.255', '256.1.1.1', '1.2.3', '1.2.3.4.5', 'a.b.c.d', '', null];
 const IPV6_TEST_INPUTS = ['2001:db8::1', '::1', 'not-ipv6', '192.168.1.1', ''];
 
-// Source: electron/main.js, inline port validation in the portscan-start handler
+// Source: electron/main.js, portscan-start's array-shaped call to isValidPort()
+// (was inline bounds logic before the v1.11.0 TCP Ping release extracted a
+// shared isValidPort() helper — this snapshot is a second, independent
+// pinning of that same formula for the array call site; see
+// isValidPort_MAIN_SNAPSHOT below for the scalar/TCP-Ping call site)
 function portValidation_MAIN_SNAPSHOT(ports) {
   if (!Array.isArray(ports) || ports.length === 0) return { ok: false };
   const normalizedPorts = ports.map(p => parseInt(p, 10));
@@ -84,12 +89,36 @@ function pingCountValidation_MAIN_SNAPSHOT(count) {
   if (isNaN(countInt) || countInt < 1 || countInt > 100) return { ok: false };
   return { ok: true };
 }
+// Source: electron/main.js, isValidPort (shared by portscan-start and tcpping-start)
+function isValidPort_MAIN_SNAPSHOT(port) {
+  const n = parseInt(port, 10);
+  return !isNaN(n) && n >= 1 && n <= 65535;
+}
+// Source: electron/main.js, isValidTcpPingTimeout (tcpping-start handler)
+function isValidTcpPingTimeout_MAIN_SNAPSHOT(ms) {
+  const n = parseInt(ms, 10);
+  return !isNaN(n) && n >= 200 && n <= 10000;
+}
+// Source: electron/main.js, classifyTcpError (tcpping-start handler)
+function classifyTcpError_MAIN_SNAPSHOT(err) {
+  const code = err && err.code;
+  if (code === 'ECONNREFUSED') return 'refused';
+  if (code === 'ECONNRESET')   return 'reset';
+  if (code === 'EHOSTUNREACH' || code === 'ENETUNREACH' || code === 'EHOSTDOWN') return 'unreachable';
+  return 'error';
+}
 const PORT_TEST_INPUTS = [
   [22, 80, 443], ['22', '80', '443'], [0], [65536], [22, 'eighty', 443],
   [], Array.from({ length: 501 }, (_, i) => i + 1), Array.from({ length: 500 }, (_, i) => i + 1),
   null, 'not-an-array',
 ];
 const PING_COUNT_TEST_INPUTS = [1, 4, 100, '8', 0, -1, 101, 9999, 'many', NaN, null, undefined];
+const SINGLE_PORT_TEST_INPUTS = [1, 22, '80', 443, 65535, '65535', 0, -1, 65536, 'eighty', NaN, null, undefined];
+const TCP_PING_TIMEOUT_TEST_INPUTS = [200, '2000', 10000, 199, 10001, 0, -1, 'fast', NaN, null, undefined];
+const TCP_ERROR_TEST_INPUTS = [
+  { code: 'ECONNREFUSED' }, { code: 'ECONNRESET' }, { code: 'EHOSTUNREACH' },
+  { code: 'ENETUNREACH' }, { code: 'EHOSTDOWN' }, { code: 'EACCES' }, {}, null, undefined,
+];
 
 describe('main.js / validate.js parity (stopgap until unified)', () => {
   it('isValidHost: main.js snapshot agrees with validateHost()===null across all test inputs', () => {
@@ -125,6 +154,28 @@ describe('main.js / validate.js parity (stopgap until unified)', () => {
       const mainOk = pingCountValidation_MAIN_SNAPSHOT(input).ok;
       const libOk  = validatePingCount(input) === null;
       expect(libOk).toBe(mainOk);
+    }
+  });
+
+  it('single-port validation (TCP Ping): main.js\'s isValidPort agrees with validatePorts([port]) on accept/reject outcome', () => {
+    for (const input of SINGLE_PORT_TEST_INPUTS) {
+      const mainOk = isValidPort_MAIN_SNAPSHOT(input);
+      const libOk  = validatePorts([input]).ok;
+      expect(libOk).toBe(mainOk);
+    }
+  });
+
+  it('TCP Ping timeout validation: main.js\'s isValidTcpPingTimeout agrees with validateTcpPingTimeout() on accept/reject outcome', () => {
+    for (const input of TCP_PING_TIMEOUT_TEST_INPUTS) {
+      const mainOk = isValidTcpPingTimeout_MAIN_SNAPSHOT(input);
+      const libOk  = validateTcpPingTimeout(input) === null;
+      expect(libOk).toBe(mainOk);
+    }
+  });
+
+  it('TCP error classification: main.js\'s classifyTcpError agrees with the lib version across all test inputs', () => {
+    for (const input of TCP_ERROR_TEST_INPUTS) {
+      expect(classifyTcpError(input)).toBe(classifyTcpError_MAIN_SNAPSHOT(input));
     }
   });
 });

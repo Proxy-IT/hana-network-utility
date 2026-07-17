@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import PingTool,  { defaultPingState }      from './components/PingTool';
 import MultiPing, { defaultMultiPingState } from './components/MultiPing';
+import TcpPing,   { defaultTcpPingState }   from './components/TcpPing';
 import Traceroute from './components/Traceroute';
 import SubnetSweep, { defaultSweepState } from './components/SubnetSweep';
 import SubnetCalc from './components/SubnetCalc';
@@ -35,6 +36,7 @@ export default function App() {
   // Persistent state for stateful modules
   const [pingState,      setPingState]      = useState(defaultPingState);
   const [multiPingState, setMultiPingState] = useState(defaultMultiPingState);
+  const [tcpPingState,   setTcpPingState]   = useState(defaultTcpPingState);
   const [sweepState,     setSweepState]     = useState(defaultSweepState);
 
   useEffect(() => {
@@ -49,6 +51,7 @@ export default function App() {
     switch (activeTab) {
       case 'ping':      return <PingTool  state={pingState}      setState={setPingState} />;
       case 'multiping': return <MultiPing state={multiPingState} setState={setMultiPingState} />;
+      case 'tcpping':   return <TcpPing   state={tcpPingState}   setState={setTcpPingState} />;
       case 'tracert':   return <Traceroute />;
       case 'sweep':     return <SubnetSweep state={sweepState} setState={setSweepState} />;
       case 'subnet':    return <SubnetCalc />;

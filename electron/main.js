@@ -460,6 +460,18 @@ function isValidIpv6(ip) {
   return /^[0-9a-fA-F:]+$/.test(ip.trim()) && ip.includes(':');
 }
 
+// Single-port bounds check, shared by Port Scanner (per-element, after
+// normalizing its ports array) and TCP Ping (single port field).
+function isValidPort(port) {
+  const n = parseInt(port, 10);
+  return !isNaN(n) && n >= 1 && n <= 65535;
+}
+
+function isValidTcpPingTimeout(ms) {
+  const n = parseInt(ms, 10);
+  return !isNaN(n) && n >= 200 && n <= 10000;
+}
+
 const VALID_DNS_TYPES = new Set(['A','AAAA','CNAME','MX','TXT','NS','PTR','ALL']);
 
 // ── OPEN EXTERNAL LINKS ──────────────────────────────────────────────────────
@@ -611,7 +623,7 @@ ipcMain.on('portscan-start', (event, { host, ports }) => {
     event.sender.send('portscan-error', { message: 'Too many ports — maximum is 500.' });
     return;
   }
-  const invalidPort = normalizedPorts.find(p => isNaN(p) || p < 1 || p > 65535);
+  const invalidPort = normalizedPorts.find(p => !isValidPort(p));
   if (invalidPort !== undefined) {
     event.sender.send('portscan-error', { message: `Invalid port: ${invalidPort}. Ports must be integers between 1 and 65535.` });
     return;
@@ -765,5 +777,216 @@ ipcMain.on('subnet-sweep-list-start', (event, { ips }) => {
   for (let i = 0; i < Math.min(BATCH, ips.length); i++) {
     pingIp(ips[i]);
   }
+});
+
+// ── TCP PING ──────────────────────────────────────────────────────────────────
+// Repeated TCP-connect probing of a single host:port, with per-phase timing
+// (DNS resolution, TCP connect, optional TLS handshake) and explicit failure
+// classification. Unlike Port Scanner (many ports, batched concurrently) this
+// targets ONE endpoint repeatedly, so it's a serial loop — one attempt in
+// flight at a time, next attempt scheduled once the current one settles.
+//
+// classifyTcpError below is a hand-copied, parity-tested twin of
+// src/lib/tcpPingClassify.js's classifyTcpError — see
+// src/lib/__tests__/mainValidatorParity.test.js for why main.js doesn't
+// require() the ESM lib files directly (CommonJS/ESM boundary; deliberately
+// deferred unification). Keep the two in sync.
+function classifyTcpError(err) {
+  const code = err && err.code;
+  if (code === 'ECONNREFUSED') return 'refused';
+  if (code === 'ECONNRESET')   return 'reset';
+  if (code === 'EHOSTUNREACH' || code === 'ENETUNREACH' || code === 'EHOSTDOWN') return 'unreachable';
+  return 'error';
+}
+
+let tcpPingActive     = false;
+let tcpPingTimer      = null;
+let tcpPingSocket     = null; // raw net.Socket OR tls.TLSSocket, whichever is currently open
+let tcpPingGeneration = 0;    // bumped on every stop/restart so a stale async callback from a
+                              // torn-down session can never be mistaken for the current one,
+                              // even after tcpPingActive has already flipped back to true for
+                              // a brand-new session (dns.lookup/socket events can't be cancelled)
+
+function tcpPingTeardown() {
+  tcpPingGeneration++;
+  tcpPingActive = false;
+  if (tcpPingTimer)  { clearTimeout(tcpPingTimer); tcpPingTimer = null; }
+  if (tcpPingSocket) { try { tcpPingSocket.destroy(); } catch {} tcpPingSocket = null; }
+}
+
+ipcMain.on('tcpping-stop', (event) => {
+  tcpPingTeardown();
+  event.sender.send('tcpping-stopped');
+});
+
+ipcMain.on('tcpping-start', (event, { host, port, count, timeoutMs, tls: useTls }) => {
+  if (!isValidHost(host)) {
+    event.sender.send('tcpping-error', { message: 'Invalid hostname or IP address.' });
+    return;
+  }
+  if (!isValidPort(port)) {
+    event.sender.send('tcpping-error', { message: 'Invalid port. Port must be an integer between 1 and 65535.' });
+    return;
+  }
+  if (!isValidTcpPingTimeout(timeoutMs)) {
+    event.sender.send('tcpping-error', { message: 'Timeout must be between 200 and 10000 ms.' });
+    return;
+  }
+  const hasCount = count !== undefined && count !== null;
+  const countInt = hasCount ? parseInt(count, 10) : null;
+  if (hasCount && (isNaN(countInt) || countInt < 1 || countInt > 100)) {
+    event.sender.send('tcpping-error', { message: 'Attempt count must be between 1 and 100.' });
+    return;
+  }
+
+  // Fresh session — tear down any lingering state from a previous run, then
+  // fix this session's identity so every closure below can tell a stale
+  // callback (from whatever session existed before this teardown) apart from
+  // its own.
+  tcpPingTeardown();
+  tcpPingActive = true;
+  const myGeneration = tcpPingGeneration;
+
+  const dns     = require('dns');
+  const net     = require('net');
+  const tls     = require('tls');
+  const portInt = parseInt(port, 10);
+  const timeout = parseInt(timeoutMs, 10);
+  const INTERVAL = 1000;
+  let seq = 0;
+
+  function isCurrent() {
+    return tcpPingActive && tcpPingGeneration === myGeneration;
+  }
+
+  function scheduleNext() {
+    if (!isCurrent()) return;
+    if (countInt && seq >= countInt) {
+      tcpPingActive = false;
+      event.sender.send('tcpping-done', {});
+      return;
+    }
+    tcpPingTimer = setTimeout(attempt, INTERVAL);
+  }
+
+  // Builds the failure-shaped result payload — every failure branch shares
+  // this shape (only status/error/connectMs vary; tlsMs and totalMs are
+  // always null on failure).
+  function fail(status, error, extra = {}) {
+    return { status, connectMs: null, tlsMs: null, totalMs: null, error, ...extra };
+  }
+
+  function attempt() {
+    if (!isCurrent()) return;
+    seq++;
+    const currentSeq = seq;
+    const dnsStart = process.hrtime.bigint();
+    let dnsSettled = false;
+
+    function emit(dnsMs, payload) {
+      event.sender.send('tcpping-result', { seq: currentSeq, dnsMs: dnsMs != null ? parseFloat(dnsMs.toFixed(2)) : null, ...payload });
+      scheduleNext();
+    }
+
+    // dns.lookup() has no built-in timeout and can't be cancelled — this
+    // timer polyfills one so a hanging/black-holed resolver still respects
+    // the configured timeout instead of stalling the whole probe loop
+    // indefinitely. If the real lookup eventually does return, dnsSettled
+    // makes it a no-op.
+    const dnsTimer = setTimeout(() => {
+      if (dnsSettled) return;
+      dnsSettled = true;
+      if (!isCurrent()) return;
+      const dnsMs = Number(process.hrtime.bigint() - dnsStart) / 1e6;
+      emit(dnsMs, fail('dns-timeout', 'DNS lookup timed out'));
+    }, timeout);
+
+    dns.lookup(host, (dnsErr, address) => {
+      if (dnsSettled) return;
+      dnsSettled = true;
+      clearTimeout(dnsTimer);
+      if (!isCurrent()) return;
+      const dnsMs = Number(process.hrtime.bigint() - dnsStart) / 1e6;
+
+      if (dnsErr) {
+        emit(dnsMs, fail('dns-error', dnsErr.message));
+        return;
+      }
+
+      const socket = new net.Socket();
+      tcpPingSocket = socket;
+      let settled = false;
+      const connectStart = process.hrtime.bigint();
+
+      function finish(payload) {
+        if (settled || !isCurrent()) return;
+        settled = true;
+        emit(dnsMs, payload);
+      }
+
+      socket.setTimeout(timeout);
+
+      socket.on('connect', () => {
+        if (!isCurrent()) { socket.destroy(); return; }
+        const connectMs = Number(process.hrtime.bigint() - connectStart) / 1e6;
+
+        if (!useTls) {
+          finish({
+            status: 'success', connectMs: parseFloat(connectMs.toFixed(2)), tlsMs: null,
+            totalMs: parseFloat((dnsMs + connectMs).toFixed(2)), error: null,
+          });
+          socket.destroy();
+          return;
+        }
+
+        // Hand off to TLS on the SAME already-open socket (not a second
+        // connection) — disarm the raw socket's timeout first so it can't
+        // fire mid-handshake alongside the TLS socket's own timeout.
+        socket.setTimeout(0);
+        const tlsStart = process.hrtime.bigint();
+        let tlsSocket;
+        try {
+          tlsSocket = tls.connect({ socket, servername: host, rejectUnauthorized: false });
+        } catch (e) {
+          finish(fail('tls-error', e.message, { connectMs: parseFloat(connectMs.toFixed(2)) }));
+          socket.destroy();
+          return;
+        }
+        tcpPingSocket = tlsSocket;
+        tlsSocket.setTimeout(timeout);
+
+        tlsSocket.once('secureConnect', () => {
+          const tlsMs = Number(process.hrtime.bigint() - tlsStart) / 1e6;
+          finish({
+            status: 'success', connectMs: parseFloat(connectMs.toFixed(2)), tlsMs: parseFloat(tlsMs.toFixed(2)),
+            totalMs: parseFloat((dnsMs + connectMs + tlsMs).toFixed(2)), error: null,
+          });
+          tlsSocket.destroy();
+        });
+        tlsSocket.on('timeout', () => {
+          finish(fail('tls-timeout', 'TLS handshake timed out', { connectMs: parseFloat(connectMs.toFixed(2)) }));
+          tlsSocket.destroy();
+        });
+        tlsSocket.on('error', (e) => {
+          finish(fail('tls-error', e.message, { connectMs: parseFloat(connectMs.toFixed(2)) }));
+          tlsSocket.destroy();
+        });
+      });
+
+      socket.on('timeout', () => {
+        finish(fail('timeout', 'Connection timed out'));
+        socket.destroy();
+      });
+
+      socket.on('error', (err) => {
+        finish(fail(classifyTcpError(err), err.message));
+        socket.destroy();
+      });
+
+      socket.connect(portInt, address);
+    });
+  }
+
+  attempt();
 });
 

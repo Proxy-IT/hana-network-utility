@@ -160,6 +160,123 @@ thousands of entries.
 
 ---
 
+## v1.11.0 — July 2026
+
+### New module — TCP Ping
+
+An eleventh module: repeated TCP-connect probing of a single host:port —
+the complement to ICMP ping for confirming a specific service is reachable
+when ICMP itself is firewalled.
+
+- Per-attempt phase timing: DNS resolution, TCP connect, and an optional
+  TLS handshake (toggle, off by default), each measured and reported
+  separately rather than folded into one number
+- Explicit failure classification instead of a single pass/fail bit:
+  `refused` (port closed), `timeout` (no answer), `unreachable`
+  (network-level failure), `dns-error`, `tls-error`/`tls-timeout` (TCP
+  succeeded, TLS didn't) — each shown with its own color, matching the
+  app's existing Port Scanner color language (green/amber/gray/red)
+- **Fixed mode** (5–100 attempts) or **Continuous mode** with a live
+  timing graph, min/avg/max, packet loss, jitter (mean delta between
+  consecutive successful attempts), and longest-failure-streak — the
+  last two are new stats that didn't exist anywhere else in the app
+- Export the full attempt log and summary as `.txt` or `.csv`
+
+**Design notes:**
+- One unified IPC channel (`tcpping-start`, with an optional `count`)
+  rather than copying Ping's split fixed/continuous channel pair — Ping
+  splits because it spawns two different OS `ping` invocations; TCP Ping
+  has no OS process at all, it's a homegrown `setTimeout` loop, so there
+  was no reason to carry that split over.
+- `tls.connect({ rejectUnauthorized: false })` is intentional, not a
+  weakened check: the goal is measuring whether a TLS handshake completes
+  and how long it takes, not validating the peer's certificate chain — a
+  self-signed or expired cert should still report a successful handshake
+  with timing. No data is sent or received over the TLS socket beyond the
+  handshake itself, and it's destroyed immediately after.
+- DNS is resolved to a bare IP before `net.Socket.connect()` is called
+  (rather than letting `connect()` resolve the hostname itself), so DNS
+  time is measured as its own phase instead of silently folding into
+  connect time.
+- Reused the established validate.js ↔ main.js parity pattern (see
+  `src/lib/__tests__/mainValidatorParity.test.js`) rather than trying to
+  finally unify the two — main.js is CommonJS and doesn't `require()` the
+  ESM `validate.js` today, a known, deliberately-deferred gap. New
+  validators/classifiers were added to `validate.js` /
+  `tcpPingClassify.js`, hand-copied into `main.js`, and pinned by new
+  parity-test cases so the two can't silently drift.
+- Jitter, failure-streak, and summary stats are pure, independently
+  tested functions (`src/utils/tcpPingStats.js`) operating on the full
+  attempt history, not an untested `useRef` accumulator — unlike the
+  existing continuous-Ping stats, which have zero test coverage today.
+- No CFAA/authorization disclaimer gate (unlike Port Scanner) — repeatedly
+  probing one already-specified port is closer in character to Ping than
+  to a port sweep.
+
+### Sidebar reorganized
+
+Module order regrouped by category: Ping, Multi-Ping, TCP Ping, Port
+Scanner, Traceroute, Subnet Sweep, Subnet Calc, DNS Lookup, IP Info,
+Hana's Favs, Latency Guide.
+
+**Found and fixed during review** — this module (raw sockets, TLS, DNS,
+new IPC surface — more security-relevant surface area than any single
+release since the auto-updater) went through an 8-angle multi-agent
+review before release. The cross-file-contract and conventions angles
+came back fully clean (IPC channel names, payload shapes, and validator
+call sites all traced correctly end to end; no CLAUDE.md exists in this
+repo to check against). Two specific failure hypotheses raised going in —
+an orphaned raw socket after a TLS-wrapped socket is destroyed, and a
+double-emission race between a raw-socket and TLS-socket timeout/error
+firing together — were directly tested against real Node behavior and
+ruled out, not just assumed safe. Real issues found and fixed:
+- **A stale-session race**: the module-level active/socket/timer state
+  had no way to tell a callback from a torn-down session apart from a
+  brand-new one if a user stopped and immediately restarted while a
+  `dns.lookup()` or socket event was still in flight (neither can be
+  cancelled once started) — the stale callback could emit a result into
+  the new session's attempt log or clobber its socket/timer reference.
+  Fixed with a generation counter: every stop/restart bumps it, and every
+  async callback checks its own captured generation before doing anything.
+- **`dns.lookup()` had no timeout**, unlike the connect and TLS phases —
+  a hanging or black-holed resolver could stall the entire probe loop
+  indefinitely regardless of the configured timeout. Fixed with a manual
+  timer race (Node's `dns.lookup()` has no built-in timeout option or
+  cancellation); added a distinct `dns-timeout` status (amber, matching
+  the "reachable but didn't answer in time" semantic already used for
+  TCP/TLS timeouts) rather than folding it into the generic `dns-error`.
+- **The stats-backing array's cap was wrong by an order of magnitude**:
+  documented as "hours of headroom at 1 attempt/sec" but set to 1,500
+  entries — 25 minutes, not hours. A continuous session run longer than
+  that would silently start reporting a rolling 25-minute window instead
+  of true since-Start figures, contradicting both the code's own comment
+  and the export/report's implicit promise. Raised to 86,400 (24 hours).
+- Extracted `fail()`/`emit()` helpers in the main-process attempt loop to
+  replace five near-identical inline failure-payload literals — needed
+  anyway to carry the generation check in one place rather than five.
+- `tcpPingStats.js`'s `computeJitter` and `computeTcpPingStats` each
+  independently filtered/mapped the same successful-attempts list;
+  factored into a shared internal helper so the two can't quietly
+  disagree if the "what counts as a successful RTT" rule ever changes.
+- A parity-test doc comment went stale the moment the Port Scanner port
+  check was extracted into a shared `isValidPort()` — it still claimed to
+  pin "inline" logic that no longer existed. Corrected to describe what
+  it actually pins now.
+
+Noted but deliberately not changed, as low-severity and consistent with
+existing, already-tolerated patterns elsewhere in this codebase: the
+same min/avg/max/loss formula now exists in three places (Ping's fixed
+summary, its continuous accumulator, and TCP Ping's stats module) with
+no shared helper between them; the low-level "socket + timeout + classify"
+skeleton is hand-rolled a second time rather than factored out of Port
+Scanner's `scanPort()`; and the 1–65535 port-bounds check now has three
+independent copies. All three mirror this codebase's pre-existing,
+documented convention of tolerating some duplication across modules
+(e.g. every component already keeps its own local `StatCard`/`RttGraph`)
+rather than introducing shared abstractions speculatively.
+
+---
+
 ## v1.10.0 — July 2026
 
 ### New module — Hana's Favs
