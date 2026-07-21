@@ -1,0 +1,28 @@
+name: Publish to Winget
+
+# Fires on every non-draft, non-prerelease GitHub Release — exactly what
+# build.yml's release job already publishes (draft: false, prerelease: false),
+# so no changes to build.yml are needed.
+#
+# Dormant until a base version of Proxy-IT.HanaNetworkUtility exists in
+# microsoft/winget-pkgs (submitted separately via `wingetcreate new`) —
+# winget-releaser can only update an existing package, not create the first
+# submission. Once that base version is merged, this starts working
+# automatically on the next release.
+#
+# Requires a repo secret WINGET_TOKEN: a classic GitHub PAT (not fine-grained)
+# with public_repo scope, belonging to the account that forked
+# microsoft/winget-pkgs.
+on:
+  release:
+    types: [released]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: Proxy-IT.HanaNetworkUtility
+          installers-regex: '\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
