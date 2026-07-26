@@ -5,7 +5,24 @@ import {
   exportMyIpTxt, exportMyIpCsv,
   exportIpLookupTxt, exportIpLookupCsv,
   exportWhoisTxt, exportWhoisCsv,
+  exportLocalInterfaceTxt, exportLocalInterfaceCsv,
 } from '../utils/export';
+
+const isBrowser = !window.electronAPI;
+
+// Used only in npm run dev without Electron, where getLocalInterfaces() has
+// no main process to answer it — mirrors DnsLookup.js's DEMO_RESULTS pattern.
+const DEMO_INTERFACES = {
+  interfaces: [
+    { name: 'Ethernet', type: 'wired', addresses: [{ family: 'IPv4', address: '192.168.1.42', cidr: '192.168.1.42/24' }], mac: 'aa:bb:cc:dd:ee:ff', internal: false },
+    { name: 'Wi-Fi', type: 'wifi', addresses: [{ family: 'IPv4', address: '192.168.1.77', cidr: '192.168.1.77/24' }], mac: '11:22:33:44:55:66', internal: false },
+  ],
+  defaultName: 'Ethernet',
+  classificationFailed: false,
+};
+
+const TYPE_LABEL = { wired: 'Wired', wifi: 'Wi-Fi', other: 'Other', unknown: 'Unknown' };
+const TYPE_COLOR = { wired: '#00D4FF', wifi: '#00FF9C', other: '#FFB020', unknown: '#3D4D65' };
 
 const INSTRUCTIONS = {
   title: 'How to use IP Info & WhoIs',
@@ -146,12 +163,39 @@ export default function IpInfo() {
   const [whoisLoading, setWhoisLoading] = useState(false);
   const [whoisError, setWhoisError]   = useState(null);
 
+  const [localIfaces, setLocalIfaces]       = useState([]);
+  const [selectedIfaceName, setSelectedIfaceName] = useState(null);
+  const [localLoading, setLocalLoading]     = useState(true);
+  const [localError, setLocalError]         = useState(null);
+  const [classificationFailed, setClassificationFailed] = useState(false);
+
   // Auto-fetch public IP on mount
   useEffect(() => {
     fetchPublicIp()
       .then(data => { setMyIp(data); setMyIpLoading(false); })
       .catch(e  => { setMyIpError(e.message); setMyIpLoading(false); });
   }, []);
+
+  // Auto-fetch local network interfaces on mount
+  useEffect(() => {
+    function apply(data) {
+      setLocalIfaces(data.interfaces);
+      setSelectedIfaceName(data.defaultName || (data.interfaces[0] && data.interfaces[0].name) || null);
+      setClassificationFailed(!!data.classificationFailed);
+      setLocalLoading(false);
+    }
+    if (isBrowser) {
+      apply(DEMO_INTERFACES);
+      return;
+    }
+    window.electronAPI.getLocalInterfaces()
+      .then(apply)
+      .catch(e => { setLocalError(e.message); setLocalLoading(false); });
+  }, []);
+
+  const selectedIface = localIfaces.find(i => i.name === selectedIfaceName) || null;
+  const selectedIpv4  = selectedIface ? selectedIface.addresses.find(a => a.family === 'IPv4') : null;
+  const selectedIpv6  = selectedIface ? selectedIface.addresses.find(a => a.family === 'IPv6') : null;
 
   async function runIpLookup() {
     if (!lookupIp.trim()) return;
@@ -183,6 +227,56 @@ export default function IpInfo() {
       <p style={s.sub}>Look up public IP details, geolocation, ISP info, and domain registration records</p>
 
       <Instructions {...INSTRUCTIONS} />
+
+      {/* ── LOCAL NETWORK ── */}
+      <div style={s.section}>
+        <span style={s.sectionLabel}>LOCAL NETWORK</span>
+
+        {localLoading && <LoadingBar label="Detecting network interfaces…" />}
+        {localError   && <ErrorBox message={localError} />}
+        {!localLoading && !localError && localIfaces.length === 0 && (
+          <ErrorBox message="No active network interfaces found." />
+        )}
+        {!localLoading && classificationFailed && localIfaces.length > 0 && (
+          <div style={{ fontSize: 11, color: '#FFB020' }}>
+            ⚠ Couldn't determine wired vs WiFi for your interfaces — showing all as "Unknown." The interface below may not be your preferred connection.
+          </div>
+        )}
+        {!localLoading && selectedIface && (
+          <>
+            <div style={s.fg}>
+              <label style={s.label}>INTERFACE</label>
+              <select style={s.select} value={selectedIfaceName || ''} onChange={e => setSelectedIfaceName(e.target.value)}>
+                {localIfaces.map(i => (
+                  <option key={i.name} value={i.name}>{i.name} ({TYPE_LABEL[i.type]})</option>
+                ))}
+              </select>
+            </div>
+            <div style={s.myIpCard}>
+              <div style={s.myIpMain}>
+                <div style={s.myIpAddress}>{selectedIpv4 ? selectedIpv4.address : '—'}</div>
+                <div style={s.myIpLocation}>
+                  <span style={{ ...s.resultCountryBadge, color: TYPE_COLOR[selectedIface.type], borderColor: TYPE_COLOR[selectedIface.type] }}>
+                    {TYPE_LABEL[selectedIface.type]}
+                  </span>
+                </div>
+              </div>
+              <div style={s.detailGrid}>
+                <DetailRow label="Interface"  value={selectedIface.name} />
+                <DetailRow label="IPv4"       value={selectedIpv4 ? selectedIpv4.address : null} />
+                <DetailRow label="Subnet"     value={selectedIpv4 ? selectedIpv4.cidr : null} />
+                <DetailRow label="IPv6"       value={selectedIpv6 ? selectedIpv6.address : null} />
+                <DetailRow label="MAC"        value={selectedIface.mac} />
+              </div>
+            </div>
+            <ExportBar
+              disabled={false}
+              onExportTxt={() => exportLocalInterfaceTxt(selectedIface)}
+              onExportCsv={() => exportLocalInterfaceCsv(selectedIface)}
+            />
+          </>
+        )}
+      </div>
 
       {/* ── MY PUBLIC IP ── */}
       <div style={s.section}>
@@ -457,6 +551,13 @@ const s = {
     lineHeight: 1, marginBottom: 6,
   },
   myIpLocation: { fontSize: 13, color: '#8892A4' },
+
+  fg: { display: 'flex', flexDirection: 'column', gap: 6 },
+  label: { fontSize: 10, fontWeight: 500, color: '#3D4D65', textTransform: 'uppercase', letterSpacing: '0.1em' },
+  select: {
+    background: '#0D1525', border: '1px solid #1E2D45', borderRadius: 6, color: '#E8EDF5',
+    fontFamily: 'JetBrains Mono, monospace', fontSize: 13, padding: '8px 12px', outline: 'none', width: 280,
+  },
 
   inputRow: { display: 'flex', gap: 10 },
   input: {

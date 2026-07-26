@@ -1,5 +1,5 @@
-import React from 'react';
-import { intToIp, parseCidrNotation } from '../utils/subnet';
+import React, { useMemo } from 'react';
+import { intToIp, parseCidrNotation, sortSweepResults } from '../utils/subnet';
 import { exportSweepTxt, exportSweepCsv } from '../utils/export';
 import Instructions from './Instructions';
 import ExportBar from './ExportBar';
@@ -32,6 +32,7 @@ export const defaultSweepState = {
   done:         false,
   progress:     0,
   displayLimit: 254,       // show first 254 results, expand on demand
+  liveOnly:     false,     // viewing preference, not a per-sweep cursor — does not reset on new sweep
   sweepError:   null,
 };
 
@@ -59,7 +60,7 @@ function generateFakeSweep(s, e) {
 }
 
 export default function SubnetSweep({ state, setState }) {
-  const { baseIp, start, end, cidr, mode, running, results, done, progress, displayLimit, sweepError } = state;
+  const { baseIp, start, end, cidr, mode, running, results, done, progress, displayLimit, liveOnly, sweepError } = state;
 
   function set(patch) { setState(prev => ({ ...prev, ...patch })); }
   function setBaseIp(v)   { setState(prev => ({ ...prev, baseIp:   typeof v === 'function' ? v(prev.baseIp)   : v })); }
@@ -205,12 +206,20 @@ export default function SubnetSweep({ state, setState }) {
     drip();
   }
 
-  // Sort results by last octet numerically for display
-  const sorted = [...results].sort((a, b) => {
-    const aL = parseInt(a.ip.split('.').pop(), 10);
-    const bL = parseInt(b.ip.split('.').pop(), 10);
-    return aL - bL;
-  });
+  // Alive hosts bubble to the top; export always uses the full, unfiltered
+  // `results` regardless of the liveOnly checkbox or displayLimit below —
+  // pagination and the live-only filter are display concerns only.
+  //
+  // Filter BEFORE sorting (not after) so a sparse live-only view on a large
+  // sweep only sorts the small remaining subset, not the full result set;
+  // memoized since `results` can reach 65,534 entries (a /16 sweep) and
+  // would otherwise re-sort on every unrelated re-render (typing in the
+  // CIDR field, toggling Show All, etc.).
+  const filtered = useMemo(() => {
+    const base = liveOnly ? results.filter(r => r.alive) : results;
+    return sortSweepResults(base);
+  }, [results, liveOnly]);
+  const visible = filtered.slice(0, displayLimit);
 
   const alive = results.filter(r => r.alive);
   const dead  = results.filter(r => !r.alive);
@@ -355,20 +364,32 @@ export default function SubnetSweep({ state, setState }) {
         </div>
       )}
 
-      {/* Results table — two columns, all IPs shown */}
-      {sorted.length > 0 && (
+      {/* Results table — paginated, alive hosts bubble to the top.
+          Gated on the unfiltered `results` count (not `filtered`), so the
+          section — and the "Live hosts only" checkbox itself — stays visible
+          even when that filter currently matches zero hosts; otherwise there
+          would be no way to uncheck it once it filtered everything out. */}
+      {results.length > 0 && (
         <div style={s.section}>
           <div style={s.sectionHeader}>
             <span style={s.sectionLabel}>SCAN RESULTS</span>
-            <div style={s.legend}>
-              <span style={s.legendDot('#00FF9C')} />
-              <span style={s.legendText}>Live</span>
-              <span style={s.legendDot('#3D4D65')} />
-              <span style={s.legendText}>No response</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={liveOnly}
+                  onChange={e => set({ liveOnly: e.target.checked, displayLimit: 254 })}
+                  style={{ accentColor: '#00D4FF', cursor: 'pointer' }} />
+                <span style={{ fontSize: 12, color: '#8892A4' }}>Live hosts only</span>
+              </label>
+              <div style={s.legend}>
+                <span style={s.legendDot('#00FF9C')} />
+                <span style={s.legendText}>Live</span>
+                <span style={s.legendDot('#3D4D65')} />
+                <span style={s.legendText}>No response</span>
+              </div>
             </div>
           </div>
           <div style={s.resultGrid}>
-            {sorted.map(r => (
+            {visible.map(r => (
               <div key={r.ip} style={{ ...s.resultRow, ...(r.alive ? s.resultRowAlive : s.resultRowDead) }}>
                 <span style={{ ...s.resultDot, background: r.alive ? '#00FF9C' : '#2A3A50', boxShadow: r.alive ? '0 0 5px rgba(0,255,156,0.4)' : 'none' }} />
                 <span style={{ ...s.resultIp, color: r.alive ? '#00FF9C' : '#3D4D65' }}>
@@ -380,6 +401,22 @@ export default function SubnetSweep({ state, setState }) {
               </div>
             ))}
           </div>
+          {filtered.length > displayLimit && (
+            <div style={{ ...s.paginationBar, ...s.expandBtnBottom }}>
+              <span style={s.paginationText}>
+                Showing {visible.length} of {filtered.length} {liveOnly ? 'live hosts' : 'results'}
+              </span>
+              <button style={s.expandBtn} onClick={() => setDisplayLimit(filtered.length)}>Show All</button>
+            </div>
+          )}
+          {displayLimit >= filtered.length && filtered.length > 254 && (
+            <div style={{ ...s.paginationBar, ...s.expandBtnBottom }}>
+              <span style={s.paginationText}>
+                Showing all {filtered.length} {liveOnly ? 'live hosts' : 'results'}
+              </span>
+              <button style={s.expandBtn} onClick={() => setDisplayLimit(254)}>Show Less</button>
+            </div>
+          )}
         </div>
       )}
 

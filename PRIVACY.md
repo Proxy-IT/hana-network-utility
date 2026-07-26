@@ -32,6 +32,12 @@ browser when you click one — this is not a request Hana itself makes; your
 browser handles it independently, outside of Hana's process, the same as
 clicking any link on a web page.
 
+The **Local Network** section of IP Info reads your network adapter
+configuration via a local OS command (`Get-NetAdapter` on Windows,
+`networksetup` on macOS) to determine which of your active connections are
+wired versus WiFi — this never leaves your machine and is not a network
+request of any kind.
+
 No data from any of these requests is stored or transmitted to the developer.
 
 ## Automatic Updates

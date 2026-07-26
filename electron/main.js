@@ -120,6 +120,12 @@ function sysCmd(name) {
   return path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', name);
 }
 
+// powershell.exe doesn't live directly under System32 like ping.exe/tracert.exe
+// do, so it gets its own resolver rather than overloading sysCmd().
+function sysPowershell() {
+  return path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+
 // ── PING (streaming, line by line) ───────────────────────────────────────────
 ipcMain.on('ping-start', (event, { host, count }) => {
   // Validate inputs
@@ -496,6 +502,126 @@ ipcMain.handle('get-system-info', async () => ({
   hostname: os.hostname(),
   networkInterfaces: os.networkInterfaces(),
 }));
+
+// ── LOCAL NETWORK INTERFACES ──────────────────────────────────────────────────
+// Classifies each active network interface as wired/wifi/other for IP Info's
+// local-interface selector. Node's os.networkInterfaces() has no concept of
+// interface type, so this shells out to a platform command — no user input
+// reaches either command, the simplest handler in this file from an
+// injection-safety standpoint — and merges the classification in. If the
+// platform command fails or produces unparseable output, falls back to
+// returning every interface tagged 'unknown' rather than erroring out.
+//
+// The four functions below are hand-copied, parity-tested twins of
+// src/lib/networkInterfaceParse.js — see
+// src/lib/__tests__/mainValidatorParity.test.js for why main.js doesn't
+// require() the ESM lib files directly (CommonJS/ESM boundary; deliberately
+// deferred unification). Keep them in sync.
+function classifyWindowsMedia(physicalMediaType) {
+  const v = (physicalMediaType || '').trim();
+  if (v === '802.3') return 'wired';
+  if (v === 'Native 802.11' || v === 'Wireless LAN') return 'wifi';
+  return 'other';
+}
+function parseWindowsAdapterJson(jsonText) {
+  if (!jsonText || !jsonText.trim()) return [];
+  const parsed = JSON.parse(jsonText);
+  const list = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+  return list.map(a => ({ name: a.Name, type: classifyWindowsMedia(a.PhysicalMediaType) }));
+}
+function classifyMacHardwarePort(hardwarePortName) {
+  const v = hardwarePortName || '';
+  if (/Wi-Fi/i.test(v)) return 'wifi';
+  if (/Ethernet/i.test(v)) return 'wired';
+  return 'other';
+}
+function parseMacHardwarePorts(rawText) {
+  if (!rawText || !rawText.trim()) return [];
+  const results = [];
+  const blocks = rawText.split(/\r?\n\r?\n/);
+  for (const block of blocks) {
+    const portMatch   = block.match(/^Hardware Port:\s*(.+)$/m);
+    const deviceMatch = block.match(/^Device:\s*(.+)$/m);
+    if (portMatch && deviceMatch) {
+      results.push({ name: deviceMatch[1].trim(), type: classifyMacHardwarePort(portMatch[1].trim()) });
+    }
+  }
+  return results;
+}
+
+ipcMain.handle('get-local-interfaces', async () => {
+  const rawIfaces = os.networkInterfaces();
+
+  // Run the platform command and classify adapter types. Any failure here
+  // (spawn error, non-zero exit, unparseable output, or a 5s hang — matching
+  // the timeout convention every other one-shot spawn() in this file uses,
+  // e.g. ping-start/subnet-sweep's pingOne()) leaves typeByName empty and
+  // sets classificationFailed, so every interface below falls back to
+  // 'unknown' rather than the whole handler erroring out or hanging forever.
+  let typeByName = new Map();
+  let classificationFailed = false;
+  try {
+    const output = await new Promise((resolve, reject) => {
+      const cmd  = isWin ? sysPowershell() : 'networksetup';
+      const args = isWin
+        ? ['-NoProfile', '-NonInteractive', '-Command', 'Get-NetAdapter | Select-Object Name,PhysicalMediaType,Status | ConvertTo-Json']
+        : ['-listallhardwareports'];
+      const proc = spawn(cmd, args);
+      let stdout = '', stderr = '', settled = false;
+      const killTimer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { proc.kill(); } catch {}
+        reject(new Error('Timed out waiting for interface classification command.'));
+      }, 5000);
+      proc.stdout.on('data', d => { stdout += d.toString(); });
+      proc.stderr.on('data', d => { stderr += d.toString(); });
+      proc.on('error', err => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(killTimer);
+        reject(err);
+      });
+      proc.on('close', code => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(killTimer);
+        if (code !== 0) reject(new Error(stderr || `exited with code ${code}`));
+        else resolve(stdout);
+      });
+    });
+    const classified = isWin ? parseWindowsAdapterJson(output) : parseMacHardwarePorts(output);
+    typeByName = new Map(classified.map(c => [c.name, c.type]));
+  } catch {
+    // Graceful degradation — typeByName stays empty, every interface below
+    // falls back to 'unknown', and classificationFailed lets the renderer
+    // explain WHY rather than silently defaulting to whatever interface
+    // os.networkInterfaces() happens to enumerate first.
+    classificationFailed = true;
+  }
+
+  const interfaces = Object.entries(rawIfaces).map(([name, addresses]) => ({
+    name,
+    type: typeByName.get(name) || 'unknown',
+    addresses: (addresses || []).map(a => ({ family: a.family, address: a.address, cidr: a.cidr })),
+    mac: addresses && addresses[0] ? addresses[0].mac : null,
+    internal: addresses && addresses[0] ? addresses[0].internal : true,
+  }));
+
+  // Default selection: first active (non-internal, has a real IPv4 address)
+  // wired interface; else first such wifi; else first available non-internal
+  // interface of any type; else null. os.networkInterfaces() does not
+  // reliably omit every disabled/addressless adapter across all platforms,
+  // so the "has ≥1 address" filter is explicit here, not assumed free.
+  const active = interfaces.filter(i => !i.internal && i.addresses.some(a => a.family === 'IPv4'));
+  const defaultIface =
+    active.find(i => i.type === 'wired') ||
+    active.find(i => i.type === 'wifi') ||
+    active[0] ||
+    null;
+
+  return { interfaces, defaultName: defaultIface ? defaultIface.name : null, classificationFailed };
+});
 
 // ── DNS LOOKUP ───────────────────────────────────────────────────────────────
 ipcMain.handle('dns-lookup', async (event, { host, type, server }) => {
@@ -957,9 +1083,32 @@ ipcMain.on('tcpping-start', (event, { host, port, count, timeoutMs, tls: useTls 
 
         tlsSocket.once('secureConnect', () => {
           const tlsMs = Number(process.hrtime.bigint() - tlsStart) / 1e6;
+
+          // Read peer certificate details BEFORE destroy() — cert data is
+          // gone once the socket closes. Read-only inspection: this never
+          // feeds into any trust decision (rejectUnauthorized stays false,
+          // unchanged), it's informational display only, same spirit as
+          // the TLS timing itself.
+          let certValidTo = null, certDaysRemaining = null, certSubjectCN = null, certIssuerCN = null;
+          try {
+            const cert = tlsSocket.getPeerCertificate();
+            if (cert && cert.valid_to) {
+              certValidTo = cert.valid_to;
+              const validToMs = Date.parse(cert.valid_to);
+              if (!isNaN(validToMs)) {
+                certDaysRemaining = Math.floor((validToMs - Date.now()) / 86400000);
+              }
+              certSubjectCN = cert.subject?.CN ?? null;
+              certIssuerCN  = cert.issuer?.CN ?? null;
+            }
+          } catch {
+            // Defensive only — getPeerCertificate() shouldn't throw post-handshake.
+          }
+
           finish({
             status: 'success', connectMs: parseFloat(connectMs.toFixed(2)), tlsMs: parseFloat(tlsMs.toFixed(2)),
             totalMs: parseFloat((dnsMs + connectMs + tlsMs).toFixed(2)), error: null,
+            certValidTo, certDaysRemaining, certSubjectCN, certIssuerCN,
           });
           tlsSocket.destroy();
         });

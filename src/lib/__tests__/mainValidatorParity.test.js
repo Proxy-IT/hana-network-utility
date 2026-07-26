@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateHost, isValidIpv4, isValidIpv6, validatePorts, validatePingCount, validateTcpPingTimeout } from '../validate.js';
 import { classifyTcpError } from '../tcpPingClassify.js';
+import { parseWindowsAdapterJson, parseMacHardwarePorts } from '../networkInterfaceParse.js';
 
 /**
  * IMPORTANT — read before editing either file.
@@ -31,6 +32,17 @@ import { classifyTcpError } from '../tcpPingClassify.js';
  * If you're reading this because it failed: check whether electron/main.js
  * and src/lib/validate.js have drifted apart, and either bring them back
  * in sync or (better) finally do the unification and delete this file.
+ *
+ * STATUS UPDATE (v1.11.5): this hand-copy-plus-parity-test pattern has now
+ * been applied a third time — first validate.js's isValidHost/isValidIpv4/
+ * isValidIpv6 (v1.8.0), then tcpPingClassify.js/isValidPort/
+ * isValidTcpPingTimeout (v1.11.0), now networkInterfaceParse.js's two
+ * parsers (this release) — meaning main.js now carries four hand-copied
+ * functions' worth of duplicated logic across three separate lib files,
+ * each only as safe as its corresponding fixed input-array fixture. This is
+ * the point where the deferred CJS/ESM unification should get an actual
+ * target release rather than being deferred a fourth time — noted here as
+ * a deliberate, tracked decision, not silently repeated.
  */
 
 // ── Pinned snapshot of electron/main.js's current logic ────────────────────────
@@ -120,6 +132,64 @@ const TCP_ERROR_TEST_INPUTS = [
   { code: 'ENETUNREACH' }, { code: 'EHOSTDOWN' }, { code: 'EACCES' }, {}, null, undefined,
 ];
 
+// Source: electron/main.js, get-local-interfaces handler's hand-copied inline
+// version of src/lib/networkInterfaceParse.js's parseWindowsAdapterJson
+function classifyWindowsMedia_MAIN_SNAPSHOT(physicalMediaType) {
+  const v = (physicalMediaType || '').trim();
+  if (v === '802.3') return 'wired';
+  if (v === 'Native 802.11' || v === 'Wireless LAN') return 'wifi';
+  return 'other';
+}
+function parseWindowsAdapterJson_MAIN_SNAPSHOT(jsonText) {
+  if (!jsonText || !jsonText.trim()) return [];
+  const parsed = JSON.parse(jsonText);
+  const list = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+  return list.map(a => ({ name: a.Name, type: classifyWindowsMedia_MAIN_SNAPSHOT(a.PhysicalMediaType) }));
+}
+
+// Source: electron/main.js, get-local-interfaces handler's hand-copied inline
+// version of src/lib/networkInterfaceParse.js's parseMacHardwarePorts
+function classifyMacHardwarePort_MAIN_SNAPSHOT(hardwarePortName) {
+  const v = hardwarePortName || '';
+  if (/Wi-Fi/i.test(v)) return 'wifi';
+  if (/Ethernet/i.test(v)) return 'wired';
+  return 'other';
+}
+function parseMacHardwarePorts_MAIN_SNAPSHOT(rawText) {
+  if (!rawText || !rawText.trim()) return [];
+  const results = [];
+  const blocks = rawText.split(/\r?\n\r?\n/);
+  for (const block of blocks) {
+    const portMatch   = block.match(/^Hardware Port:\s*(.+)$/m);
+    const deviceMatch = block.match(/^Device:\s*(.+)$/m);
+    if (portMatch && deviceMatch) {
+      results.push({ name: deviceMatch[1].trim(), type: classifyMacHardwarePort_MAIN_SNAPSHOT(portMatch[1].trim()) });
+    }
+  }
+  return results;
+}
+
+const WINDOWS_ADAPTER_JSON_TEST_INPUTS = [
+  '{"Name":"Ethernet","PhysicalMediaType":"802.3","Status":"Up"}',
+  JSON.stringify([
+    { Name: 'Ethernet', PhysicalMediaType: '802.3', Status: 'Up' },
+    { Name: 'Wi-Fi', PhysicalMediaType: 'Native 802.11', Status: 'Up' },
+    { Name: 'vEthernet (Default Switch)', PhysicalMediaType: '', Status: 'Up' },
+  ]),
+  '{"Name":"WLAN","PhysicalMediaType":"Wireless LAN","Status":"Up"}',
+  '{"Name":"Loopback","PhysicalMediaType":null}',
+  '', '   ', 'null',
+];
+const MAC_HARDWARE_PORTS_TEST_INPUTS = [
+  ['Hardware Port: Wi-Fi', 'Device: en0', 'Ethernet Address: aa:bb:cc:dd:ee:ff', '',
+   'Hardware Port: Thunderbolt Ethernet', 'Device: en5', 'Ethernet Address: aa:bb:cc:dd:ee:00', '',
+   'Hardware Port: Bluetooth PAN', 'Device: en6', 'Ethernet Address: aa:bb:cc:dd:ee:11', ''].join('\n'),
+  'Hardware Port: Ethernet\nDevice: en1\nEthernet Address: 00:00:00:00:00:00\n',
+  ['Hardware Port: Wi-Fi', 'Device: en0', 'Ethernet Address: aa:bb:cc:dd:ee:ff', '',
+   'VLAN Configurations', '==================='].join('\n'),
+  '', '   ',
+];
+
 describe('main.js / validate.js parity (stopgap until unified)', () => {
   it('isValidHost: main.js snapshot agrees with validateHost()===null across all test inputs', () => {
     for (const input of HOST_TEST_INPUTS) {
@@ -176,6 +246,18 @@ describe('main.js / validate.js parity (stopgap until unified)', () => {
   it('TCP error classification: main.js\'s classifyTcpError agrees with the lib version across all test inputs', () => {
     for (const input of TCP_ERROR_TEST_INPUTS) {
       expect(classifyTcpError(input)).toBe(classifyTcpError_MAIN_SNAPSHOT(input));
+    }
+  });
+
+  it('Windows adapter parsing: main.js\'s inline copy agrees with parseWindowsAdapterJson() across all test inputs', () => {
+    for (const input of WINDOWS_ADAPTER_JSON_TEST_INPUTS) {
+      expect(parseWindowsAdapterJson(input)).toEqual(parseWindowsAdapterJson_MAIN_SNAPSHOT(input));
+    }
+  });
+
+  it('Mac hardware-port parsing: main.js\'s inline copy agrees with parseMacHardwarePorts() across all test inputs', () => {
+    for (const input of MAC_HARDWARE_PORTS_TEST_INPUTS) {
+      expect(parseMacHardwarePorts(input)).toEqual(parseMacHardwarePorts_MAIN_SNAPSHOT(input));
     }
   });
 });

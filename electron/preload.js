@@ -88,6 +88,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // System info
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
 
+  // Local network interfaces
+  getLocalInterfaces: () => ipcRenderer.invoke('get-local-interfaces'),
+
   // Open external URL in default browser
   openExternal: (url) => ipcRenderer.send('open-external', url),
 

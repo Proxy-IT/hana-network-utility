@@ -60,6 +60,9 @@ a firewall blocks pings but the service you care about is still reachable.
   timed out, unreachable, DNS failure, and TLS failure are all shown distinctly
 - **Fixed mode** (5–100 attempts) or **Continuous mode** with a live timing graph
 - Min/avg/max, packet loss, jitter, and longest-failure-streak stats
+- **TLS certificate expiry** — when TLS is on, shows days remaining on the
+  peer certificate, color-coded green (>60 days), amber (30–60), red (<30
+  or expired)
 - Export the full attempt log and summary as `.txt` or `.csv`
 
 ### ⊘ Port Scanner
@@ -89,7 +92,11 @@ Discover every host on a subnet without touching the command line.
 - Parallel ping sweep with a live progress bar
 - **Stop Scan** cancels a running sweep instantly and preserves partial results
 - Results paginate (first 254 shown, live hosts bubble to the top) so large
-  sweeps stay responsive; export always includes every result
+  sweeps stay responsive — click **Show All** to expand, **Show Less** to
+  collapse back
+- **Live hosts only** checkbox to hide non-responding hosts from the list
+- Export always includes every result, regardless of what's currently
+  visible or filtered on screen
 - Export full results as `.txt` or `.csv`
 
 ### ⊟ Subnet Calculator
@@ -113,15 +120,18 @@ Resolve DNS records for any hostname or IP address.
 - Export results as `.txt` or `.csv`
 
 ### ⊕ IP Info & WhoIs
-Three tools in one tab — no browser required.
+Four tools in one tab — no browser required.
 
+- **Local Network** — auto-detected active network interfaces with a
+  selector; defaults to your wired connection if one is active, falling
+  back to WiFi otherwise; shows IPv4/IPv6, subnet, and MAC address
 - **Your Public IP** — auto-detected on load with ISP, location, ASN,
   timezone, and coordinate details
 - **IP Lookup** — enter any IP address to see its full geolocation
   and network information
 - **WhoIs** — look up registration records for any domain or IP,
   including registrar, creation and expiry dates, and name servers
-- All three sections export to `.txt` and `.csv`
+- All sections export to `.txt` and `.csv`
 
 ### ↗ Hana's Favs
 A curated, credited directory of free third-party network and security tools.
@@ -255,6 +265,7 @@ npm run build          # produce an installer in dist/
 
 | Version | Highlights |
 |---|---|
+| v1.11.5 | TCP Ping shows TLS certificate expiry (color-coded); IP Info gains a Local Network interface selector (defaults to wired, falls back to WiFi); Subnet Sweep pagination and a "Live hosts only" filter actually shipped (previously documented but never wired up since v1.7.0) |
 | v1.11.0 | TCP Ping — repeated TCP-connect probing of a host:port with DNS/connect/TLS phase timing, failure classification, jitter, and failure-streak tracking; sidebar module order regrouped by category |
 | v1.10.0 | Hana's Favs — a curated, credited directory of free SSL/TLS, MAC, BGP, and security lookup tools |
 | v1.9.2 | Fixed macOS auto-update (electron-updater requires a `.zip` release asset; the mac build previously only produced a `.dmg`) |

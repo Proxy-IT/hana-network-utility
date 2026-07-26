@@ -160,6 +160,102 @@ thousands of entries.
 
 ---
 
+## v1.11.5 — July 2026
+
+Three focused additions this release.
+
+### TCP Ping — TLS certificate expiry
+
+When TLS is enabled, a successful handshake now surfaces the peer
+certificate's expiration: days remaining, color-coded green (>60 days),
+amber (30–60 days), red (<30 days or already expired). Shown as a summary
+stat card (tracking the most recent successful attempt — cert expiry is a
+point-in-time server property, not something to average across attempts)
+and appended to each per-attempt line in the recent-attempts log. Exported
+in both `.txt` and `.csv`. Read-only: `getPeerCertificate()` is inspected
+purely for display, the same `rejectUnauthorized: false` trust behavior
+from v1.11.0 is unchanged — this never becomes a trust decision.
+
+### IP Info — Local Network interface selector
+
+A new first section in IP Info shows your active network interfaces, with
+a dropdown defaulting to a wired ("hardline") connection if one is active,
+falling back to WiFi if not. Shows IPv4/IPv6 address, subnet, MAC, and a
+wired/WiFi/other type badge. Since Node has no built-in way to tell a wired
+adapter from a WiFi one, this classifies interfaces via a local OS command
+(`Get-NetAdapter` on Windows, `networksetup -listallhardwareports` on
+macOS) — read-only, no user input reaches either command. If the OS command
+fails or produces unparseable output, interfaces still display, just
+tagged "Unknown" rather than the whole section erroring out.
+
+### Subnet Sweep — pagination actually shipped, plus a live-only filter
+
+**A confirmed, real gap**: README and this changelog have claimed since
+v1.7.0 that Subnet Sweep results "paginate (first 254 shown, live hosts
+bubble to the top)." They didn't. `displayLimit` state and the pagination
+CSS existed but were never wired into the render path, and no alive-first
+sort was ever implemented — a large sweep (up to 65,534 hosts for a /16)
+rendered every single result unconditionally. Fixed properly this time:
+alive hosts now genuinely sort to the top, the first 254 results show by
+default with a "Show All" / "Show Less" toggle, and a new "Live hosts
+only" checkbox lets you hide non-responding hosts entirely. Export always
+includes every result regardless of what's currently visible or filtered.
+
+### Found and fixed during review
+
+Went through the same 8-angle multi-agent review used for v1.11.0's TCP
+Ping module — this release adds a second `child_process.spawn` surface
+(alongside TCP Ping's raw sockets) and reads TLS peer certificate data, so
+the review was treated as mandatory. Two angles (reuse, conventions) came
+back fully clean. Real issues found and fixed:
+- **No timeout on the new `get-local-interfaces` spawn** — every other
+  one-shot `spawn()` in `main.js` kills the process after 5s; this one
+  didn't, so a hung `Get-NetAdapter`/`networksetup` call would leave IP
+  Info stuck on "Detecting network interfaces…" forever and leak the
+  process. Added the same 5s timeout-and-kill pattern used elsewhere.
+- **A genuine bug in my own demo data**: `TcpPing.js`'s browser-mode
+  `fakeAttempt()` generated `certDaysRemaining` and `certValidTo`
+  independently, so ~2.5% of fake successful attempts could show
+  "Expired" directly above an expiry date months in the future — a
+  contradiction the real backend can't produce, since it always derives
+  the day count from the same date. Fixed to derive one from the other.
+- **Export column reordering risk**: the new TCP Ping cert columns were
+  inserted before `Error`, shifting its position for anyone parsing the
+  exported CSV/TXT by fixed index. Moved to the end of both formats.
+- **Dead data**: `certSubjectCN`/`certIssuerCN` were captured on every
+  handshake and even faked in demo mode, but never shown or exported —
+  now surfaced as a hover tooltip on the cert stat card and per-attempt
+  log line, and added as export columns.
+- **Silent-failure gap**: when the OS classification command fails
+  entirely, every interface fell back to "Unknown" with no indication
+  the wired-preference logic didn't run — a user whose antivirus blocks
+  the PowerShell call would be silently defaulted to whatever interface
+  happened to enumerate first. Added an explicit `classificationFailed`
+  signal from the backend and a warning banner in IP Info.
+- **A stale, inaccurate doc comment**: `sortSweepResults`'s comment
+  claimed it also governed export ordering — it doesn't; the export path
+  has its own independent full-4-octet sort. Corrected.
+- **Real inefficiency for large sweeps**: the sort/filter pipeline
+  re-ran on every render regardless of whether `results` changed, and
+  sorted before filtering rather than after — for a maxed /16 sweep
+  (65,534 entries), this meant re-sorting the full array on every
+  unrelated re-render, and sorting entries that were about to be thrown
+  away by the "Live hosts only" filter. Now memoized and filters first.
+
+Noted but deliberately not changed: `IpInfo.js`'s "Local Network" section
+re-spawns the classification command on every tab visit rather than
+caching — this exactly matches the pre-existing behavior of this file's
+other two sections (`fetchPublicIp` also re-fetches on every mount, since
+none of `IpInfo.js`'s state is lifted into `App.js`), so fixing it in
+isolation for only the new section would be inconsistent rather than
+correct. Also noted: this is the third time the hand-copy-into-`main.js`
+parity-test pattern has been applied (`validate.js` at v1.8.0,
+`tcpPingClassify.js` at v1.11.0, `networkInterfaceParse.js` now) — flagged
+in `mainValidatorParity.test.js` as the point where the long-deferred
+CJS/ESM unification should get an actual target release.
+
+---
+
 ## v1.11.0 — July 2026
 
 ### New module — TCP Ping

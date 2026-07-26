@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { classifyLatency } from '../utils/latency';
+import { classifyCertExpiry } from '../utils/certExpiry';
 import { computeTcpPingStats } from '../utils/tcpPingStats';
 import { exportTcpPingTxt, exportTcpPingCsv } from '../utils/export';
 import { validateHost, validatePorts, validateTcpPingTimeout, validatePingCount } from '../lib/validate';
@@ -37,11 +38,27 @@ export const defaultTcpPingState = {
   host: '', port: '443', timeoutMs: '2000', useTls: false,
   continuous: false, count: '10',
   running: false, errorMsg: null,
-  attempts: [], // { seq, status, dnsMs, connectMs, tlsMs, totalMs, error } — capped at MAX_ATTEMPTS
+  // { seq, status, dnsMs, connectMs, tlsMs, totalMs, error,
+  //   certValidTo, certDaysRemaining, certSubjectCN, certIssuerCN } — capped at MAX_ATTEMPTS
+  attempts: [],
 };
 
 function capAttempts(arr) {
   return arr.length > MAX_ATTEMPTS ? arr.slice(arr.length - MAX_ATTEMPTS) : arr;
+}
+
+// Cert expiry is a point-in-time property of the server, not a stat to
+// average — the summary card shows the MOST RECENT successful attempt's
+// cert, not an aggregate. Backward scan, since this would otherwise run
+// every render against up to MAX_ATTEMPTS entries in continuous mode.
+// Checks certValidTo (not certDaysRemaining) — a cert with a valid_to string
+// Node's Date.parse couldn't interpret still has a raw date worth showing,
+// even without a numeric day count or color-coded badge for it.
+function mostRecentCert(attempts) {
+  for (let i = attempts.length - 1; i >= 0; i--) {
+    if (attempts[i].status === 'success' && attempts[i].certValidTo != null) return attempts[i];
+  }
+  return null;
 }
 
 function fakeAttempt(seq, useTls) {
@@ -51,7 +68,20 @@ function fakeAttempt(seq, useTls) {
     const connectMs = parseFloat((4 + Math.random() * 25).toFixed(2));
     const tlsMs     = useTls ? parseFloat((10 + Math.random() * 45).toFixed(2)) : null;
     const totalMs   = parseFloat((dnsMs + connectMs + (tlsMs || 0)).toFixed(2));
-    return { seq, status: 'success', dnsMs, connectMs, tlsMs, totalMs, error: null };
+    // certDaysRemaining is derived FROM certValidTo (matching how the real
+    // backend computes it) rather than generated independently — otherwise
+    // demo mode could show a self-contradictory pairing like "Expired" next
+    // to an expiry date months in the future.
+    const certValidToMs = Date.now() + (-10 + Math.random() * 400) * 86400000;
+    const certFields = useTls
+      ? {
+          certDaysRemaining: Math.floor((certValidToMs - Date.now()) / 86400000),
+          certValidTo: new Date(certValidToMs).toUTCString(),
+          certSubjectCN: 'demo.example.com',
+          certIssuerCN: 'Demo Certificate Authority',
+        }
+      : { certDaysRemaining: null, certValidTo: null, certSubjectCN: null, certIssuerCN: null };
+    return { seq, status: 'success', dnsMs, connectMs, tlsMs, totalMs, error: null, ...certFields };
   }
   if (r < 0.90) return { seq, status: 'timeout',     dnsMs, connectMs: null, tlsMs: null, totalMs: null, error: 'Connection timed out' };
   if (r < 0.96) return { seq, status: 'refused',     dnsMs, connectMs: null, tlsMs: null, totalMs: null, error: 'Connection refused' };
@@ -147,9 +177,11 @@ export default function TcpPing({ state, setState }) {
     setState(prev => ({ ...prev, attempts: [], errorMsg: null, running: false }));
   }
 
-  const stats   = computeTcpPingStats(state.attempts);
-  const latInfo = stats.avg != null ? classifyLatency(stats.avg) : null;
-  const hasData = state.attempts.length > 0;
+  const stats       = computeTcpPingStats(state.attempts);
+  const latInfo     = stats.avg != null ? classifyLatency(stats.avg) : null;
+  const hasData     = state.attempts.length > 0;
+  const certAttempt = state.useTls ? mostRecentCert(state.attempts) : null;
+  const certInfo    = certAttempt ? classifyCertExpiry(certAttempt.certDaysRemaining) : null;
 
   return (
     <div style={s.wrap}>
@@ -239,6 +271,13 @@ export default function TcpPing({ state, setState }) {
           <StatCard label="Jitter" value={stats.jitter != null ? `${stats.jitter} ms` : '—'} />
           <StatCard label="Sent / Lost" value={`${stats.sent} / ${stats.lost}`} sub={`${stats.loss}% loss`} color={stats.lost > 0 ? '#FF4B6A' : '#00FF9C'} />
           <StatCard label="Longest Fail Streak" value={stats.longestFailStreak} color={stats.longestFailStreak > 0 ? '#FFB020' : '#00FF9C'} />
+          {certAttempt && (
+            <StatCard label="TLS Cert Expires"
+              value={certAttempt.certDaysRemaining == null ? '—' : certAttempt.certDaysRemaining < 0 ? 'Expired' : `${certAttempt.certDaysRemaining}d`}
+              sub={certAttempt.certValidTo ? `Expires ${new Date(certAttempt.certValidTo).toLocaleDateString()}` : undefined}
+              color={certInfo?.color} badge={certInfo?.tier}
+              title={[certAttempt.certSubjectCN && `Subject: ${certAttempt.certSubjectCN}`, certAttempt.certIssuerCN && `Issuer: ${certAttempt.certIssuerCN}`].filter(Boolean).join('\n') || undefined} />
+          )}
         </div>
       )}
 
@@ -263,8 +302,10 @@ export default function TcpPing({ state, setState }) {
                 <span style={s.logSeq}>#{a.seq}</span>
                 <span style={{ color: STATUS_COLOR[a.status], minWidth: 96 }}>{STATUS_LABEL[a.status]}</span>
                 {a.status === 'success'
-                  ? <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#8892A4' }}>
+                  ? <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#8892A4' }}
+                      title={[a.certSubjectCN && `Subject: ${a.certSubjectCN}`, a.certIssuerCN && `Issuer: ${a.certIssuerCN}`].filter(Boolean).join('\n') || undefined}>
                       DNS {a.dnsMs}ms · Connect {a.connectMs}ms{a.tlsMs != null ? ` · TLS ${a.tlsMs}ms` : ''} · Total {a.totalMs}ms
+                      {a.certDaysRemaining != null ? ` · Cert ${a.certDaysRemaining}d` : (a.certValidTo ? ' · Cert (date unparsed)' : '')}
                     </span>
                   : <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#3D4D65' }}>{a.error}</span>
                 }
@@ -284,9 +325,9 @@ export default function TcpPing({ state, setState }) {
   );
 }
 
-function StatCard({ label, value, sub, color, badge }) {
+function StatCard({ label, value, sub, color, badge, title }) {
   return (
-    <div style={s.card}>
+    <div style={s.card} title={title}>
       <div style={s.cardLabel}>{label}</div>
       <div style={{ ...s.cardValue, color: color || '#E8EDF5' }}>{value}</div>
       {sub   && <div style={{ fontSize: 11, color: '#8892A4', marginTop: 3 }}>{sub}</div>}

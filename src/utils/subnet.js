@@ -124,3 +124,15 @@ export function parseCidrNotation(cidr) {
     prefix,
   };
 }
+
+// Alive hosts first (by IP within that group), then dead hosts (by IP within
+// that group) — used for Subnet Sweep's on-screen rendering only. The export
+// path (buildSweepReport/exportSweepCsv in src/utils/export.js) has its own
+// independent full-4-octet numeric sort and does NOT use this function —
+// the two orderings are intentionally separate, not the same list reused.
+export function sortSweepResults(results) {
+  return [...results].sort((a, b) => {
+    if (a.alive !== b.alive) return a.alive ? -1 : 1;
+    return parseInt(a.ip.split('.').pop(), 10) - parseInt(b.ip.split('.').pop(), 10);
+  });
+}

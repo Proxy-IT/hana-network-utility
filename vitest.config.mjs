@@ -33,6 +33,12 @@ import { defineConfig } from 'vitest/config';
  *                                 pinned by mainValidatorParity.test.js)
  *   - src/utils/tcpPingStats.js (computeJitter, longestFailureStreak,
  *                                 computeTcpPingStats)
+ *   - src/utils/certExpiry.js   (classifyCertExpiry — TLS cert expiry tier/color
+ *                                 for TCP Ping's certificate display)
+ *   - src/lib/networkInterfaceParse.js (parseWindowsAdapterJson,
+ *                                 parseMacHardwarePorts — hand-copied into
+ *                                 electron/main.js's get-local-interfaces
+ *                                 handler; pinned by mainValidatorParity.test.js)
  *
  * src/utils/usefulLinks.js is deliberately NOT in this list — like
  * LATENCY_TIERS/USE_CASE_THRESHOLDS above, LINK_CATEGORIES is static data,
@@ -96,6 +102,8 @@ export default defineConfig({
         'src/utils/openLink.js',
         'src/lib/tcpPingClassify.js',
         'src/utils/tcpPingStats.js',
+        'src/utils/certExpiry.js',
+        'src/lib/networkInterfaceParse.js',
         // export.js deliberately NOT listed — only ~1/13 functions are
         // tested, so an 80% threshold against the whole file would be
         // dishonest. Add it back once the other 11 functions are refactored

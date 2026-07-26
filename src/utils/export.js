@@ -151,17 +151,26 @@ export function exportTcpPingTxt({ host, port, useTls, attempts, stats }) {
     lines.push('');
   }
 
+  // Cert columns appended at the end, after Error — inserting them earlier
+  // would shift Error's column position for anyone parsing this fixed-width
+  // report by column, and existing TCP Ping exports from before v1.11.5 had
+  // Error as the last field.
   lines.push('--- Attempt Log ---');
-  lines.push('Seq    Status       DNS_ms     Connect_ms TLS_ms     Total_ms   Error');
-  lines.push('------ ------------ ---------- ---------- ---------- ---------- -----------');
+  lines.push('Seq    Status       DNS_ms     Connect_ms TLS_ms     Total_ms   Error       Cert_Days  Cert_Valid_To              Cert_Subject_CN                Cert_Issuer_CN');
+  lines.push('------ ------------ ---------- ---------- ---------- ---------- ----------- ---------- -------------------------- ------------------------------ ------------------------------');
   attempts.forEach(a => {
-    const seq  = String(a.seq).padEnd(6);
-    const stat = String(a.status).padEnd(12);
-    const dns  = (a.dnsMs     != null ? String(a.dnsMs)     : '-').padEnd(10);
-    const conn = (a.connectMs != null ? String(a.connectMs) : '-').padEnd(10);
-    const tls  = (a.tlsMs     != null ? String(a.tlsMs)     : '-').padEnd(10);
-    const tot  = (a.totalMs   != null ? String(a.totalMs)   : '-').padEnd(10);
-    lines.push(`${seq} ${stat} ${dns} ${conn} ${tls} ${tot} ${a.error || ''}`);
+    const seq   = String(a.seq).padEnd(6);
+    const stat  = String(a.status).padEnd(12);
+    const dns   = (a.dnsMs             != null ? String(a.dnsMs)             : '-').padEnd(10);
+    const conn  = (a.connectMs         != null ? String(a.connectMs)        : '-').padEnd(10);
+    const tls   = (a.tlsMs             != null ? String(a.tlsMs)            : '-').padEnd(10);
+    const tot   = (a.totalMs           != null ? String(a.totalMs)          : '-').padEnd(10);
+    const err   = (a.error || '').padEnd(11);
+    const cdays = (a.certDaysRemaining != null ? String(a.certDaysRemaining): '-').padEnd(10);
+    const cval  = (a.certValidTo   || '-').padEnd(26);
+    const csub  = (a.certSubjectCN || '-').padEnd(30);
+    const ciss  = a.certIssuerCN   || '-';
+    lines.push(`${seq} ${stat} ${dns} ${conn} ${tls} ${tot} ${err} ${cdays} ${cval} ${csub} ${ciss}`);
   });
 
   downloadFile(`tcpping_${host}_${port}_${timestamp()}.txt`, lines.join('\n'));
@@ -169,9 +178,13 @@ export function exportTcpPingTxt({ host, port, useTls, attempts, stats }) {
 
 export function exportTcpPingCsv({ host, port, useTls, attempts, stats }) {
   const ts = new Date().toLocaleString();
-  const rows = [['Seq', 'Status', 'DNS_ms', 'Connect_ms', 'TLS_ms', 'Total_ms', 'Error', 'Host', 'Port', 'Timestamp']];
+  // Cert columns appended at the end — inserting them before Error/Host/Port
+  // would shift those existing columns' positions for anyone parsing this
+  // CSV by fixed index (existing TCP Ping exports from before v1.11.5 ended
+  // at Timestamp).
+  const rows = [['Seq', 'Status', 'DNS_ms', 'Connect_ms', 'TLS_ms', 'Total_ms', 'Error', 'Host', 'Port', 'Timestamp', 'Cert_Days_Remaining', 'Cert_Valid_To', 'Cert_Subject_CN', 'Cert_Issuer_CN']];
   attempts.forEach(a => {
-    rows.push([a.seq, a.status, a.dnsMs ?? '', a.connectMs ?? '', a.tlsMs ?? '', a.totalMs ?? '', a.error || '', host, port, ts]);
+    rows.push([a.seq, a.status, a.dnsMs ?? '', a.connectMs ?? '', a.tlsMs ?? '', a.totalMs ?? '', a.error || '', host, port, ts, a.certDaysRemaining ?? '', a.certValidTo ?? '', a.certSubjectCN ?? '', a.certIssuerCN ?? '']);
   });
   if (stats) {
     rows.push([]);
@@ -374,6 +387,45 @@ export function exportMyIpCsv(data) {
   ];
   const csv = toCsv(rows);
   downloadFile(`my_public_ip_${timestamp()}.csv`, csv, 'text/csv');
+}
+
+export function exportLocalInterfaceTxt(iface) {
+  const ts = new Date().toLocaleString();
+  const ipv4 = iface.addresses.find(a => a.family === 'IPv4');
+  const ipv6 = iface.addresses.find(a => a.family === 'IPv6');
+  const lines = [
+    '========================================',
+    '  Hana - Network Utility',
+    '  Local Network Interface Report',
+    '========================================',
+    `Timestamp  : ${ts}`,
+    '',
+    '--- Interface Details ---',
+    `Interface  : ${iface.name || '—'}`,
+    `Type       : ${iface.type || '—'}`,
+    `IPv4       : ${ipv4 ? ipv4.address : '—'}`,
+    `Subnet     : ${ipv4 ? ipv4.cidr : '—'}`,
+    `IPv6       : ${ipv6 ? ipv6.address : '—'}`,
+    `MAC        : ${iface.mac || '—'}`,
+  ];
+  downloadFile(`local_interface_${iface.name}_${timestamp()}.txt`, lines.join('\n'));
+}
+
+export function exportLocalInterfaceCsv(iface) {
+  const ts = new Date().toLocaleString();
+  const ipv4 = iface.addresses.find(a => a.family === 'IPv4');
+  const ipv6 = iface.addresses.find(a => a.family === 'IPv6');
+  const rows = [
+    ['Field', 'Value', 'Timestamp'],
+    ['Interface', iface.name || '', ts],
+    ['Type',      iface.type || '', ''],
+    ['IPv4',      ipv4 ? ipv4.address : '', ''],
+    ['Subnet',    ipv4 ? ipv4.cidr : '', ''],
+    ['IPv6',      ipv6 ? ipv6.address : '', ''],
+    ['MAC',       iface.mac || '', ''],
+  ];
+  const csv = toCsv(rows);
+  downloadFile(`local_interface_${iface.name}_${timestamp()}.csv`, csv, 'text/csv');
 }
 
 export function exportIpLookupTxt(data) {

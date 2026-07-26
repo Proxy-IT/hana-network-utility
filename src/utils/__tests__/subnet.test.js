@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCidrNotation, calculateSubnet, validateIp } from '../subnet.js';
+import { parseCidrNotation, calculateSubnet, validateIp, sortSweepResults } from '../subnet.js';
 
 /**
  * Tests for src/utils/subnet.js.
@@ -140,5 +140,58 @@ describe('validateIp', () => {
     expect(validateIp('1.2.3')).toBe(false);
     expect(validateIp('1.2.3.4.5')).toBe(false);
     expect(validateIp('a.b.c.d')).toBe(false);
+  });
+});
+
+// ── sortSweepResults ─────────────────────────────────────────────────────────
+//
+// Backing fix for a real, confirmed gap: README/CHANGELOG (since v1.7.0)
+// claimed Subnet Sweep results "paginate, live hosts bubble to the top," but
+// no alive-first sort was ever actually implemented — only a plain numeric
+// sort by last octet existed. This is the first real test coverage for the
+// sort actually being correct.
+
+describe('sortSweepResults', () => {
+  it('puts alive hosts before dead hosts regardless of IP order', () => {
+    const results = [
+      { ip: '10.0.0.1', alive: false },
+      { ip: '10.0.0.5', alive: true },
+      { ip: '10.0.0.2', alive: false },
+      { ip: '10.0.0.9', alive: true },
+    ];
+    const sorted = sortSweepResults(results);
+    expect(sorted.map(r => r.ip)).toEqual(['10.0.0.5', '10.0.0.9', '10.0.0.1', '10.0.0.2']);
+  });
+
+  it('sorts numerically by last octet within each alive/dead group', () => {
+    const results = [
+      { ip: '10.0.0.20', alive: true },
+      { ip: '10.0.0.3', alive: true },
+      { ip: '10.0.0.100', alive: false },
+      { ip: '10.0.0.9', alive: false },
+    ];
+    const sorted = sortSweepResults(results);
+    expect(sorted.map(r => r.ip)).toEqual(['10.0.0.3', '10.0.0.20', '10.0.0.9', '10.0.0.100']);
+  });
+
+  it('handles an all-alive list', () => {
+    const results = [{ ip: '10.0.0.5', alive: true }, { ip: '10.0.0.1', alive: true }];
+    expect(sortSweepResults(results).map(r => r.ip)).toEqual(['10.0.0.1', '10.0.0.5']);
+  });
+
+  it('handles an all-dead list', () => {
+    const results = [{ ip: '10.0.0.5', alive: false }, { ip: '10.0.0.1', alive: false }];
+    expect(sortSweepResults(results).map(r => r.ip)).toEqual(['10.0.0.1', '10.0.0.5']);
+  });
+
+  it('handles an empty array', () => {
+    expect(sortSweepResults([])).toEqual([]);
+  });
+
+  it('does not mutate the input array', () => {
+    const results = [{ ip: '10.0.0.5', alive: false }, { ip: '10.0.0.1', alive: true }];
+    const original = [...results];
+    sortSweepResults(results);
+    expect(results).toEqual(original);
   });
 });
