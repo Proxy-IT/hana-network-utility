@@ -202,6 +202,241 @@ export function exportTcpPingCsv({ host, port, useTls, attempts, stats }) {
   downloadFile(`tcpping_${host}_${port}_${timestamp()}.csv`, toCsv(rows), 'text/csv');
 }
 
+// ── TLS CERT EXPIRY CALENDAR REMINDERS (.ics) ─────────────────────────────────
+//
+// Generates one iCalendar file holding up to four all-day reminder events
+// ahead of a certificate's expiry. Hand-rolled against RFC 5545 rather than
+// pulling a dependency, same as the CSV/TXT builders above.
+//
+// The pure builder is exported separately from the download wrapper for the
+// same reason buildSweepReport is: Blob/URL.createObjectURL don't exist in the
+// Node test environment, so the string-building has to be testable on its own.
+
+const ICS_LEAD_DAYS = [45, 30, 10, 3];
+const ICS_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const ICS_MAX_SAN_SHOWN = 10;
+
+/**
+ * Escape a value for an iCalendar TEXT property (RFC 5545 §3.3.11).
+ *
+ * Certificate CNs and SAN entries are attacker-influenceable — the same threat
+ * class that motivated csvCell's formula-injection defense — but iCalendar
+ * needs a completely different escaping model, so csvCell is not reusable here:
+ * it wraps in quotes, ICS backslash-escapes.
+ *
+ * Order matters twice over:
+ *  1. Line breaks are normalized BEFORE escaping. Escaping only "\n" would
+ *     leave a lone CR sitting raw inside a content line — §3.1's TSAFE-CHAR
+ *     excludes control characters, and a stray CR corrupts folding. Remaining
+ *     control characters are stripped for the same reason (HTAB is legal, so
+ *     it stays).
+ *  2. Backslash is escaped FIRST, or every backslash introduced by the
+ *     escapes below would itself get escaped again.
+ *
+ * The injection this blocks: a newline in an issuer CN would otherwise end
+ * the DESCRIPTION property and let arbitrary iCalendar properties — or a
+ * whole extra VEVENT — be written into the file.
+ */
+export function icsEscapeText(value) {
+  if (value == null) return '';
+  return String(value)
+    .replace(/\r\n|\r/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
+}
+
+/**
+ * Fold a content line to 75 octets per RFC 5545 §3.1.
+ *
+ * Octets, not characters — so this walks code points and measures their UTF-8
+ * byte length, because splitting mid-codepoint would put an invalid UTF-8
+ * sequence after the continuation space. Continuation lines begin with a
+ * single space which itself counts against the 75, hence the 74 budget after
+ * the first segment.
+ *
+ * Always call this AFTER escaping, on the fully assembled property line.
+ */
+export function icsFoldLine(line) {
+  const enc = new TextEncoder();
+  const chars = Array.from(String(line));
+  const segments = [];
+  let cur = [];
+  let bytes = 0;
+  let limit = 75;
+
+  for (const ch of chars) {
+    const chBytes = enc.encode(ch).length;
+    if (bytes + chBytes > limit) {
+      // Don't end a segment mid-escape-sequence. An odd run of trailing
+      // backslashes means the last one opens an escape whose partner would
+      // land on the next line. Compliant parsers unfold before parsing values
+      // so this is legal either way, but not every real-world parser does.
+      let trail = 0;
+      while (trail < cur.length && cur[cur.length - 1 - trail] === '\\') trail++;
+      const carry = (trail % 2 === 1 && cur.length > 1) ? cur.pop() : null;
+
+      segments.push(cur.join(''));
+      cur = carry ? [carry] : [];
+      bytes = carry ? 1 : 0;
+      limit = 74;
+    }
+    cur.push(ch);
+    bytes += chBytes;
+  }
+  segments.push(cur.join(''));
+  return segments.join('\r\n ');
+}
+
+function icsDate(d) {
+  return String(d.getUTCFullYear())
+    + String(d.getUTCMonth() + 1).padStart(2, '0')
+    + String(d.getUTCDate()).padStart(2, '0');
+}
+
+function icsDateTimeUtc(d) {
+  return icsDate(d) + 'T'
+    + String(d.getUTCHours()).padStart(2, '0')
+    + String(d.getUTCMinutes()).padStart(2, '0')
+    + String(d.getUTCSeconds()).padStart(2, '0') + 'Z';
+}
+
+// Hand-formatted rather than toLocaleString so output is deterministic and
+// doesn't depend on the runtime's ICU data being present.
+function formatExpiryDisplay(d) {
+  let h = d.getUTCHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const min = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${ICS_MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}, ${h}:${min} ${ampm} UTC`;
+}
+
+// SAN is unbounded and attacker-controlled (shared certs can list hundreds of
+// names), so only the first few reach the description.
+function formatSanList(raw) {
+  if (!raw) return null;
+  const entries = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  if (entries.length === 0) return null;
+  const shown = entries.slice(0, ICS_MAX_SAN_SHOWN);
+  const extra = entries.length - shown.length;
+  return shown.join(', ') + (extra > 0 ? `, and ${extra} more` : '');
+}
+
+/**
+ * Build the .ics payload for a certificate's expiry reminders.
+ *
+ * Returns { ics, count, leadDays, reason } — `ics` is null when there is
+ * nothing worth scheduling, with `reason` distinguishing the two cases so the
+ * caller can say something accurate:
+ *   'unparseable' — the certificate's valid_to string couldn't be read
+ *   'expired'     — already expired, or too close to expiry for any reminder
+ *                   to still be in the future
+ *
+ * Callers should drive their UI off the returned `count`, never off a
+ * separately-computed days-remaining value: that number is calculated when the
+ * probe runs, and can disagree with this by a day at boundaries.
+ *
+ * `now` is injectable so DTSTAMP and the future-date filter are testable.
+ */
+export function buildCertReminderIcs({
+  host, certValidTo, certSubjectCN, certIssuerCN, certSubjectAltName,
+  now = new Date(),
+} = {}) {
+  const expiryMs = certValidTo ? Date.parse(certValidTo) : NaN;
+  if (isNaN(expiryMs)) {
+    return { ics: null, count: 0, leadDays: [], reason: 'unparseable' };
+  }
+  const expiry = new Date(expiryMs);
+
+  // Anchor everything on UTC calendar days. UTC has no DST, so subtracting
+  // days here is exact; reading the parsed date with local getters would shift
+  // it a day for anyone west of UTC.
+  const expiryDay = Date.UTC(expiry.getUTCFullYear(), expiry.getUTCMonth(), expiry.getUTCDate());
+  const todayDay  = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+  // ICS_LEAD_DAYS runs longest-first, so events come out chronologically.
+  const events = [];
+  for (const lead of ICS_LEAD_DAYS) {
+    const d = new Date(expiryDay);
+    d.setUTCDate(d.getUTCDate() - lead);
+    if (d.getTime() >= todayDay) events.push({ lead, date: d });
+  }
+  if (events.length === 0) {
+    return { ics: null, count: 0, leadDays: [], reason: 'expired' };
+  }
+
+  const titleHost    = host || certSubjectCN || 'unknown host';
+  const certName     = certSubjectCN || host || 'unknown';
+  const sanList      = formatSanList(certSubjectAltName);
+  const expiryText   = formatExpiryDisplay(expiry);
+  const dtstamp      = icsDateTimeUtc(now);
+  const expiryStamp  = icsDate(new Date(expiryDay));
+  const uidHost      = String(host || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Proxy-IT//Hana Network Utility//EN',
+    'CALSCALE:GREGORIAN',
+    // Outlook's desktop import path keys off METHOD; omitting it is legal but
+    // is one of the ways a file that Google accepts misbehaves in Outlook.
+    'METHOD:PUBLISH',
+  ];
+
+  for (const ev of events) {
+    // DTEND is non-inclusive (§3.8.2.2) so a one-day event ends the next day.
+    // It's spelled out rather than omitted because Outlook does not honour the
+    // spec's "DATE-valued DTSTART with no DTEND lasts one day" allowance, and
+    // §3.6.1 requires DTEND's value type to match DTSTART's.
+    const end = new Date(ev.date.getTime());
+    end.setUTCDate(end.getUTCDate() + 1);
+
+    const desc = [
+      `Certificate: ${certName}`,
+      `Issuer: ${certIssuerCN || 'Unknown'}`,
+      `Expires: ${expiryText}`,
+    ];
+    if (sanList) desc.push(`SAN: ${sanList}`);
+    desc.push('', 'Scheduled by Hana');
+
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${icsEscapeText(`hana-cert-${ev.lead}d-${uidHost}-${expiryStamp}@hana.proxy-it.co`)}`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART;VALUE=DATE:${icsDate(ev.date)}`,
+      `DTEND;VALUE=DATE:${icsDate(end)}`,
+      `SUMMARY:${icsEscapeText(`Certificate expiring in ${ev.lead} days: ${titleHost}`)}`,
+      `DESCRIPTION:${icsEscapeText(desc.join('\n'))}`,
+      'END:VEVENT',
+    );
+  }
+  lines.push('END:VCALENDAR');
+
+  return {
+    ics: lines.map(icsFoldLine).join('\r\n') + '\r\n',
+    count: events.length,
+    leadDays: events.map(e => e.lead),
+  };
+}
+
+export function exportCertRemindersIcs(args) {
+  const result = buildCertReminderIcs(args);
+  if (!result.ics) return result;
+  const safeHost = String(args?.host || 'cert').replace(/[^a-zA-Z0-9.-]/g, '_');
+  downloadFile(
+    `cert_reminders_${safeHost}_${timestamp()}.ics`,
+    result.ics,
+    'text/calendar;charset=utf-8',
+  );
+  return result;
+}
+
 // ── TRACEROUTE exports ────────────────────────────────────────────────────────
 
 export function exportTraceTxt({ host, hops }) {

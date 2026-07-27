@@ -1089,7 +1089,8 @@ ipcMain.on('tcpping-start', (event, { host, port, count, timeoutMs, tls: useTls 
           // feeds into any trust decision (rejectUnauthorized stays false,
           // unchanged), it's informational display only, same spirit as
           // the TLS timing itself.
-          let certValidTo = null, certDaysRemaining = null, certSubjectCN = null, certIssuerCN = null;
+          let certValidTo = null, certDaysRemaining = null, certSubjectCN = null,
+              certIssuerCN = null, certSubjectAltName = null;
           try {
             const cert = tlsSocket.getPeerCertificate();
             if (cert && cert.valid_to) {
@@ -1100,6 +1101,13 @@ ipcMain.on('tcpping-start', (event, { host, port, count, timeoutMs, tls: useTls 
               }
               certSubjectCN = cert.subject?.CN ?? null;
               certIssuerCN  = cert.issuer?.CN ?? null;
+              // Raw SAN string, e.g. "DNS:example.com, DNS:www.example.com".
+              // Attacker-controlled and unbounded (shared certs can carry
+              // hundreds of entries), so it is capped here rather than trusted
+              // to be small; consumers escape it again before rendering.
+              certSubjectAltName = typeof cert.subjectaltname === 'string'
+                ? cert.subjectaltname.slice(0, 4096)
+                : null;
             }
           } catch {
             // Defensive only — getPeerCertificate() shouldn't throw post-handshake.
@@ -1108,7 +1116,7 @@ ipcMain.on('tcpping-start', (event, { host, port, count, timeoutMs, tls: useTls 
           finish({
             status: 'success', connectMs: parseFloat(connectMs.toFixed(2)), tlsMs: parseFloat(tlsMs.toFixed(2)),
             totalMs: parseFloat((dnsMs + connectMs + tlsMs).toFixed(2)), error: null,
-            certValidTo, certDaysRemaining, certSubjectCN, certIssuerCN,
+            certValidTo, certDaysRemaining, certSubjectCN, certIssuerCN, certSubjectAltName,
           });
           tlsSocket.destroy();
         });

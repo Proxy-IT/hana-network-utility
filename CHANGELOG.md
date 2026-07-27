@@ -160,6 +160,51 @@ thousands of entries.
 
 ---
 
+## v1.11.6 — July 2026
+
+### Certificate expiry calendar reminders
+
+TCP Ping can now export a `.ics` calendar file for an inspected certificate.
+One file, up to four separate all-day events — 45, 30, 10, and 3 days before
+expiry — so opening it once schedules every reminder at the same time.
+
+Only future-dated reminders are written: a cert expiring in 20 days gets the
+10-day and 3-day events, and one expiring in under 3 days gets none at all,
+since a calendar reminder is useless for something already critical. That case
+surfaces urgency directly in the app instead of downloading an empty file.
+
+**Implementation notes:**
+- Hand-rolled against RFC 5545 — no dependency added, matching how the CSV and
+  TXT exporters are built. The pure builder is exported separately from the
+  download step, following the same `buildSweepReport` pattern, so the whole
+  format is unit-testable without browser APIs. `now` is an injectable
+  parameter, which is what makes the date filtering testable at all.
+- **Escaping** applies the same untrusted-string discipline as the v1.8.2 CSV
+  hardening, but with iCalendar's rules rather than CSV's — `csvCell` is not
+  reusable here (it wraps in quotes; iCalendar backslash-escapes). Certificate
+  CNs and SAN entries are attacker-influenceable, and an unescaped newline in
+  one would otherwise end the DESCRIPTION property and allow arbitrary
+  iCalendar properties — or an entire extra event — to be injected.
+- **Line folding** at 75 octets per §3.1, measured in bytes and walked by code
+  point so a multi-byte character is never split across the fold.
+- **Date math** is done entirely in UTC — extraction as well as arithmetic —
+  so no DST transition can shift a reminder by a day, and reminders are derived
+  from the certificate's absolute expiry rather than a days-remaining figure
+  computed back when the probe ran.
+- **Outlook compatibility:** `METHOD:PUBLISH` is emitted and `DTEND` is written
+  explicitly as the following day. Outlook's importer keys off the former and
+  does not honour the spec's "a DATE-valued DTSTART with no DTEND lasts one
+  day" allowance — both are ways a file Google Calendar accepts can still
+  misbehave in Outlook.
+- UIDs are deterministic, so re-importing the same file updates the existing
+  events instead of creating duplicates.
+
+Also captures the certificate's SAN list (`subjectaltname`), which was the one
+piece of certificate data v1.11.5 didn't read; it appears in the reminder body,
+truncated when a shared certificate lists many names.
+
+---
+
 ## v1.11.5 — July 2026
 
 Three focused additions this release.

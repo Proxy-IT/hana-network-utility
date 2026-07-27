@@ -63,6 +63,9 @@ a firewall blocks pings but the service you care about is still reachable.
 - **TLS certificate expiry** — when TLS is on, shows days remaining on the
   peer certificate, color-coded green (>60 days), amber (30–60), red (<30
   or expired)
+- **Calendar reminders** — export a `.ics` file with all-day reminders at 45,
+  30, 10, and 3 days before the certificate expires; opening it once adds
+  every reminder to Outlook, Google Calendar, or any iCalendar-compatible app
 - Export the full attempt log and summary as `.txt` or `.csv`
 
 ### ⊘ Port Scanner
@@ -265,6 +268,7 @@ npm run build          # produce an installer in dist/
 
 | Version | Highlights |
 |---|---|
+| v1.11.6 | Certificate expiry calendar reminders — export a `.ics` with all-day reminders at 45/30/10/3 days before a TLS certificate expires; SAN list now captured and shown |
 | v1.11.5 | TCP Ping shows TLS certificate expiry (color-coded); IP Info gains a Local Network interface selector (defaults to wired, falls back to WiFi); Subnet Sweep pagination and a "Live hosts only" filter actually shipped (previously documented but never wired up since v1.7.0) |
 | v1.11.0 | TCP Ping — repeated TCP-connect probing of a host:port with DNS/connect/TLS phase timing, failure classification, jitter, and failure-streak tracking; sidebar module order regrouped by category |
 | v1.10.0 | Hana's Favs — a curated, credited directory of free SSL/TLS, MAC, BGP, and security lookup tools |

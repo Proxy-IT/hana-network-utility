@@ -1,8 +1,11 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { classifyLatency } from '../utils/latency';
 import { classifyCertExpiry } from '../utils/certExpiry';
 import { computeTcpPingStats } from '../utils/tcpPingStats';
-import { exportTcpPingTxt, exportTcpPingCsv } from '../utils/export';
+import {
+  exportTcpPingTxt, exportTcpPingCsv,
+  buildCertReminderIcs, exportCertRemindersIcs,
+} from '../utils/export';
 import { validateHost, validatePorts, validateTcpPingTimeout, validatePingCount } from '../lib/validate';
 import Instructions from './Instructions';
 import ExportBar from './ExportBar';
@@ -38,8 +41,9 @@ export const defaultTcpPingState = {
   host: '', port: '443', timeoutMs: '2000', useTls: false,
   continuous: false, count: '10',
   running: false, errorMsg: null,
-  // { seq, status, dnsMs, connectMs, tlsMs, totalMs, error,
-  //   certValidTo, certDaysRemaining, certSubjectCN, certIssuerCN } — capped at MAX_ATTEMPTS
+  // { seq, status, dnsMs, connectMs, tlsMs, totalMs, error, certValidTo,
+  //   certDaysRemaining, certSubjectCN, certIssuerCN, certSubjectAltName }
+  //   — capped at MAX_ATTEMPTS
   attempts: [],
 };
 
@@ -79,8 +83,12 @@ function fakeAttempt(seq, useTls) {
           certValidTo: new Date(certValidToMs).toUTCString(),
           certSubjectCN: 'demo.example.com',
           certIssuerCN: 'Demo Certificate Authority',
+          certSubjectAltName: 'DNS:demo.example.com, DNS:www.demo.example.com',
         }
-      : { certDaysRemaining: null, certValidTo: null, certSubjectCN: null, certIssuerCN: null };
+      : {
+          certDaysRemaining: null, certValidTo: null, certSubjectCN: null,
+          certIssuerCN: null, certSubjectAltName: null,
+        };
     return { seq, status: 'success', dnsMs, connectMs, tlsMs, totalMs, error: null, ...certFields };
   }
   if (r < 0.90) return { seq, status: 'timeout',     dnsMs, connectMs: null, tlsMs: null, totalMs: null, error: 'Connection timed out' };
@@ -183,6 +191,23 @@ export default function TcpPing({ state, setState }) {
   const certAttempt = state.useTls ? mostRecentCert(state.attempts) : null;
   const certInfo    = certAttempt ? classifyCertExpiry(certAttempt.certDaysRemaining) : null;
 
+  // Preview what the .ics export would produce, so the button's label and
+  // enabled state come from the same builder that writes the file — never
+  // from certDaysRemaining, which is computed at probe time and can disagree
+  // by a day at boundaries. (The download re-runs the builder against a fresh
+  // clock, so the file is always right even if this preview goes stale after
+  // a UTC midnight in a long-idle session.)
+  const certReminders = useMemo(() => (certAttempt ? buildCertReminderIcs({
+    host: state.host,
+    certValidTo:        certAttempt.certValidTo,
+    certSubjectCN:      certAttempt.certSubjectCN,
+    certIssuerCN:       certAttempt.certIssuerCN,
+    certSubjectAltName: certAttempt.certSubjectAltName,
+  }) : null), [certAttempt, state.host]);
+
+  const certExpiryMs  = certAttempt ? Date.parse(certAttempt.certValidTo) : NaN;
+  const alreadyExpired = !isNaN(certExpiryMs) && certExpiryMs < Date.now();
+
   return (
     <div style={s.wrap}>
       <h2 style={s.title}>TCP Ping</h2>
@@ -252,12 +277,37 @@ export default function TcpPing({ state, setState }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <ExportBar
           disabled={!hasData}
           onExportTxt={() => exportTcpPingTxt({ host: state.host, port: state.port, useTls: state.useTls, attempts: state.attempts, stats })}
           onExportCsv={() => exportTcpPingCsv({ host: state.host, port: state.port, useTls: state.useTls, attempts: state.attempts, stats })}
         />
+        {/* Calendar reminders are about the certificate, not the attempt log —
+            hence a separate control rather than a third format in ExportBar. */}
+        {certReminders && certReminders.count > 0 && (
+          <button style={s.icsBtn}
+            title={`Adds ${certReminders.count} all-day reminder${certReminders.count === 1 ? '' : 's'} (${certReminders.leadDays.join(', ')} days before expiry) to your calendar`}
+            onClick={() => exportCertRemindersIcs({
+              host: state.host,
+              certValidTo:        certAttempt.certValidTo,
+              certSubjectCN:      certAttempt.certSubjectCN,
+              certIssuerCN:       certAttempt.certIssuerCN,
+              certSubjectAltName: certAttempt.certSubjectAltName,
+            })}>
+            🗓 Calendar reminders ({certReminders.count})
+          </button>
+        )}
+        {certReminders && certReminders.count === 0 && certReminders.reason === 'expired' && (
+          <span style={s.icsUrgent}>
+            {alreadyExpired
+              ? '⚠ Certificate has already expired — renew now.'
+              : '⚠ Expires too soon to schedule reminders — renew now.'}
+          </span>
+        )}
+        {certReminders && certReminders.reason === 'unparseable' && (
+          <span style={s.icsNote}>Certificate expiry date couldn’t be read.</span>
+        )}
         {hasData && !state.running && (
           <button style={s.clearBtn} onClick={clear}>✕ Clear</button>
         )}
@@ -417,4 +467,7 @@ const s = {
   errorBannerMsg: { flex: 1, fontSize: 12, color: '#FF4B6A', fontFamily: 'JetBrains Mono, monospace' },
   errorBannerClose: { background: 'transparent', border: 'none', color: '#FF4B6A', cursor: 'pointer', fontSize: 14, padding: '0 4px', fontFamily: 'Inter, sans-serif' },
   clearBtn: { background: 'rgba(255,75,106,0.08)', border: '1px solid rgba(255,75,106,0.25)', color: '#FF4B6A', borderRadius: 6, padding: '6px 14px', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' },
+  icsBtn: { background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.25)', color: '#00D4FF', borderRadius: 6, padding: '6px 14px', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' },
+  icsUrgent: { fontSize: 11, color: '#FF4B6A', fontFamily: 'JetBrains Mono, monospace' },
+  icsNote: { fontSize: 11, color: '#8892A4', fontFamily: 'JetBrains Mono, monospace' },
 };
