@@ -283,6 +283,45 @@ describe('buildCertReminderIcs — structure', () => {
     expect(build().leadDays).toEqual([45, 30, 10, 3]);
   });
 
+  it('attaches a display alarm to every event', () => {
+    const lines = structuralLines(build().ics);
+    expect(lines.filter(l => l === 'BEGIN:VALARM').length).toBe(4);
+    expect(lines.filter(l => l === 'END:VALARM').length).toBe(4);
+    expect(lines.filter(l => l === 'ACTION:DISPLAY').length).toBe(4);
+  });
+
+  it('fires the alarm at noon the day before, not at midnight', () => {
+    // All-day events start at 00:00, and TRIGGER is relative to DTSTART, so
+    // -PT12H is noon on the preceding day. A 0 offset would fire at midnight.
+    const triggers = structuralLines(build().ics).filter(l => l.startsWith('TRIGGER:'));
+    expect(triggers.length).toBe(4);
+    triggers.forEach(t => expect(t).toBe('TRIGGER:-PT12H'));
+  });
+
+  it('nests each VALARM inside its VEVENT, before the event ends', () => {
+    const lines = structuralLines(build().ics);
+    const seq = lines.filter(l => /^(BEGIN|END):(VEVENT|VALARM)$/.test(l));
+    // Each event must read BEGIN:VEVENT … BEGIN:VALARM … END:VALARM … END:VEVENT
+    expect(seq.slice(0, 4)).toEqual(['BEGIN:VEVENT', 'BEGIN:VALARM', 'END:VALARM', 'END:VEVENT']);
+    expect(seq.length).toBe(16);
+  });
+
+  it('gives the alarm a DESCRIPTION, which ACTION:DISPLAY requires', () => {
+    const lines = structuralLines(build().ics);
+    const alarmIdx = lines.indexOf('BEGIN:VALARM');
+    const block = lines.slice(alarmIdx, lines.indexOf('END:VALARM', alarmIdx));
+    expect(block.some(l => l.startsWith('DESCRIPTION:'))).toBe(true);
+    expect(block.find(l => l.startsWith('DESCRIPTION:')))
+      .toContain('Certificate expiring in 45 days');
+  });
+
+  it('escapes the alarm description like every other untrusted field', () => {
+    const lines = structuralLines(build({ host: 'a;b,c' }).ics);
+    const alarmIdx = lines.indexOf('BEGIN:VALARM');
+    const desc = lines.slice(alarmIdx).find(l => l.startsWith('DESCRIPTION:'));
+    expect(desc).toContain(String.raw`a\;b\,c`);
+  });
+
   it('separates the attribution from the factual body with a blank line', () => {
     const desc = structuralLines(build().ics).find(l => l.startsWith('DESCRIPTION:'));
     expect(desc).toContain(String.raw`\n\nScheduled by Hana`);

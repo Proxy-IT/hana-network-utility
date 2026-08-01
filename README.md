@@ -64,8 +64,9 @@ a firewall blocks pings but the service you care about is still reachable.
   peer certificate, color-coded green (>60 days), amber (30–60), red (<30
   or expired)
 - **Calendar reminders** — export a `.ics` file with all-day reminders at 45,
-  30, 10, and 3 days before the certificate expires; opening it once adds
-  every reminder to Outlook, Google Calendar, or any iCalendar-compatible app
+  30, 10, and 3 days before the certificate expires, each set to notify at
+  noon the day before; opening it once adds every reminder to Outlook, Google
+  Calendar, or any iCalendar-compatible app
 - Export the full attempt log and summary as `.txt` or `.csv`
 
 ### ⊘ Port Scanner

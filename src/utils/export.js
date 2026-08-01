@@ -218,6 +218,9 @@ const ICS_MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 const ICS_MAX_SAN_SHOWN = 10;
+// Relative to DTSTART, which for an all-day event is midnight — so this
+// fires at noon on the preceding day.
+const ICS_ALARM_TRIGGER = '-PT12H';
 
 /**
  * Escape a value for an iCalendar TEXT property (RFC 5545 §3.3.11).
@@ -405,14 +408,27 @@ export function buildCertReminderIcs({
     if (sanList) desc.push(`SAN: ${sanList}`);
     desc.push('', 'Scheduled by Hana');
 
+    const summary = `Certificate expiring in ${ev.lead} days: ${titleHost}`;
+
     lines.push(
       'BEGIN:VEVENT',
       `UID:${icsEscapeText(`hana-cert-${ev.lead}d-${uidHost}-${expiryStamp}@hana.proxy-it.co`)}`,
       `DTSTAMP:${dtstamp}`,
       `DTSTART;VALUE=DATE:${icsDate(ev.date)}`,
       `DTEND;VALUE=DATE:${icsDate(end)}`,
-      `SUMMARY:${icsEscapeText(`Certificate expiring in ${ev.lead} days: ${titleHost}`)}`,
+      `SUMMARY:${icsEscapeText(summary)}`,
       `DESCRIPTION:${icsEscapeText(desc.join('\n'))}`,
+      // Without a VALARM, whether the user is notified at all is left to each
+      // calendar client's default for all-day events — which is commonly no
+      // notification, making the reminder useless unless they happen to be
+      // looking at that day. TRIGGER is relative to DTSTART (§3.8.6.3), and
+      // all-day events start at midnight, so -PT12H fires at noon the day
+      // before rather than at an unhelpful midnight.
+      'BEGIN:VALARM',
+      'ACTION:DISPLAY',
+      `TRIGGER:${ICS_ALARM_TRIGGER}`,
+      `DESCRIPTION:${icsEscapeText(summary)}`,
+      'END:VALARM',
       'END:VEVENT',
     );
   }
