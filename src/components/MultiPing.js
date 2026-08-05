@@ -1,6 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { classifyLatency } from '../utils/latency';
+import { exportMultiPingTxt, exportMultiPingCsv } from '../utils/export';
 import Instructions from './Instructions';
+import ExportBar from './ExportBar';
 
 const isBrowser = !window.electronAPI;
 
@@ -223,6 +225,12 @@ export default function MultiPing({ state, setState }) {
     if (!silent) setRunning(false);
   }
 
+  // Clears the accumulated results but keeps the configured host slots, so
+  // you can restart the same set without retyping them.
+  function clearResults() {
+    setState(prev => ({ ...prev, results: {}, running: false }));
+  }
+
   const activeSlots   = slots.filter(s => s.host.trim());
   const upCount   = activeSlots.filter(s => results[s.id]?.status === 'up').length;
   const downCount = activeSlots.filter(s => results[s.id]?.status === 'down').length;
@@ -283,6 +291,19 @@ export default function MultiPing({ state, setState }) {
               </button>
           }
         </div>
+      </div>
+
+      {/* Export bar — reports on the slots that are actually configured, so a
+          removed slot's lingering results entry never reaches the file. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <ExportBar
+          disabled={!hasAnyResults}
+          onExportTxt={() => exportMultiPingTxt({ slots, results })}
+          onExportCsv={() => exportMultiPingCsv({ slots, results })}
+        />
+        {hasAnyResults && !running && (
+          <button style={s.clearBtn} onClick={clearResults}>✕ Clear</button>
+        )}
       </div>
 
       {/* Result cards */}
@@ -515,6 +536,13 @@ const s = {
   stopBtn: {
     background: 'rgba(255,75,106,0.1)', border: '1px solid rgba(255,75,106,0.3)',
     color: '#FF4B6A',
+  },
+  // Matches the Clear button in PingTool/TcpPing/SubnetSweep.
+  clearBtn: {
+    background: 'rgba(255,75,106,0.08)', border: '1px solid rgba(255,75,106,0.25)',
+    color: '#FF4B6A', borderRadius: 6, padding: '6px 14px',
+    fontSize: 11, fontWeight: 500, cursor: 'pointer',
+    fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap',
   },
 
   cardsGrid: {

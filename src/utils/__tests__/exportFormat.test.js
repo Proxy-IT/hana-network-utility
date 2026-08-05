@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildSweepReport, csvCell,
-  icsEscapeText, icsFoldLine, buildCertReminderIcs,
+  icsEscapeText, icsFoldLine, buildCertReminderIcs, countCertReminders,
+  buildMultiPingReport,
 } from '../export.js';
 
 /**
@@ -134,6 +135,64 @@ describe('csvCell — CSV formula injection + delimiter safety', () => {
   it('does not prefix an ordinary hostname/value', () => {
     expect(csvCell('dns.google')).toBe(`"dns.google"`);
     expect(csvCell('Open')).toBe(`"Open"`);
+  });
+});
+
+// ── Multi-Ping report ─────────────────────────────────────────────────────────
+
+describe('buildMultiPingReport', () => {
+  const slots = [
+    { id: 1, host: 'up.example.com' },
+    { id: 2, host: 'down.example.com' },
+    { id: 3, host: 'broken.example.com' },
+  ];
+  const results = {
+    1: { status: 'up',   rtt: 12.5, sent: 10, lost: 0, lastSeen: '10:04:11', history: [] },
+    2: { status: 'down', rtt: null, sent: 10, lost: 4, lastSeen: '10:01:02', history: [] },
+    3: { status: 'error', rtt: null, sent: 0, lost: 0, lastSeen: null, history: [],
+         errorMessage: 'Invalid hostname or IP address.' },
+  };
+
+  it('uses the current brand name', () => {
+    expect(buildMultiPingReport({ slots, results })).toContain(CORRECT_BRAND);
+    expect(buildMultiPingReport({ slots, results })).not.toContain(OLD_BRAND);
+  });
+
+  it('reports every configured host with its status and loss', () => {
+    const report = buildMultiPingReport({ slots, results });
+    expect(report).toContain('up.example.com');
+    expect(report).toContain('down.example.com');
+    expect(report).toContain('12.5 ms');
+    expect(report).toContain('40.0');            // 4 lost of 10
+    expect(report).toContain('Hosts      : 3');
+  });
+
+  it('surfaces a per-host error message', () => {
+    expect(buildMultiPingReport({ slots, results }))
+      .toContain('Invalid hostname or IP address.');
+  });
+
+  it('skips results whose slot was removed', () => {
+    // Slot 2 is gone but its results entry lingers — reporting on a host that
+    // is no longer monitored would be misleading.
+    const report = buildMultiPingReport({ slots: [slots[0]], results });
+    expect(report).toContain('up.example.com');
+    expect(report).not.toContain('down.example.com');
+    expect(report).toContain('Hosts      : 1');
+  });
+
+  it('skips empty slots and survives missing results entirely', () => {
+    const report = buildMultiPingReport({
+      slots: [{ id: 1, host: '' }, { id: 2, host: '   ' }, { id: 3, host: 'a.com' }],
+      results: {},
+    });
+    expect(report).toContain('Hosts      : 1');
+    expect(report).toContain('not started');
+  });
+
+  it('does not throw on empty or absent input', () => {
+    expect(() => buildMultiPingReport({ slots: [], results: {} })).not.toThrow();
+    expect(() => buildMultiPingReport({})).not.toThrow();
   });
 });
 
@@ -405,7 +464,14 @@ describe('buildCertReminderIcs — future-date filtering', () => {
     const r = build({ certValidTo: expiryInDays(2) });
     expect(r.count).toBe(0);
     expect(r.ics).toBeNull();
-    expect(r.reason).toBe('expired');
+    expect(r.reason).toBe('too-soon');
+  });
+
+  it('distinguishes a still-valid cert that is too soon from one already expired', () => {
+    // Both produce zero events, but they are different situations and the UI
+    // says different things about them.
+    expect(build({ certValidTo: expiryInDays(2) }).reason).toBe('too-soon');
+    expect(build({ certValidTo: expiryInDays(-10) }).reason).toBe('expired');
   });
 
   it('emits nothing when the cert expires today or has already expired', () => {
@@ -415,12 +481,112 @@ describe('buildCertReminderIcs — future-date filtering', () => {
     expect(past.reason).toBe('expired');
   });
 
+  it('reports reason null on success, matching the documented shape', () => {
+    expect(build({ certValidTo: expiryInDays(60) }).reason).toBeNull();
+  });
+
   it('reports an unreadable expiry date distinctly from an expired one', () => {
     const r = build({ certValidTo: 'not a date' });
     expect(r.count).toBe(0);
     expect(r.ics).toBeNull();
     expect(r.reason).toBe('unparseable');
     expect(buildCertReminderIcs({ host: 'h', certValidTo: null }).reason).toBe('unparseable');
+  });
+});
+
+describe('buildCertReminderIcs — alarms are never emitted already elapsed', () => {
+  // The bug this locks down: an event dated today puts TRIGGER:-PT12H at noon
+  // YESTERDAY. Clients discard elapsed alarms on import, so the single most
+  // urgent reminder silently produced no notification at all.
+  it('omits the VALARM on a same-day event rather than emitting a dead one', () => {
+    const r = build({ certValidTo: expiryInDays(3) });   // reminder lands today
+    expect(r.count).toBe(1);
+    const lines = structuralLines(r.ics);
+    expect(lines.filter(l => l === 'BEGIN:VEVENT').length).toBe(1);
+    expect(lines.filter(l => l === 'BEGIN:VALARM').length).toBe(0);
+    expect(lines.some(l => l.startsWith('TRIGGER:'))).toBe(false);
+  });
+
+  it('still attaches alarms to events comfortably in the future', () => {
+    const lines = structuralLines(build({ certValidTo: expiryInDays(60) }).ics);
+    expect(lines.filter(l => l === 'BEGIN:VALARM').length).toBe(4);
+  });
+
+  it('attaches alarms only to the events whose alarm has not passed', () => {
+    // 12 days out: the 10d reminder is 2 days away (alarm tomorrow — kept),
+    // the 3d reminder is 9 days away (alarm in 8 days — kept).
+    const r = build({ certValidTo: expiryInDays(12) });
+    expect(r.leadDays).toEqual([10, 3]);
+    const lines = structuralLines(r.ics);
+    expect(lines.filter(l => l === 'BEGIN:VEVENT').length).toBe(2);
+    expect(lines.filter(l => l === 'BEGIN:VALARM').length).toBe(2);
+  });
+
+  it('never emits a TRIGGER whose instant is already in the past', () => {
+    for (const days of [3, 4, 11, 13, 31, 46, 60, 200]) {
+      const r = build({ certValidTo: expiryInDays(days) });
+      if (!r.ics) continue;
+      const lines = structuralLines(r.ics);
+      const starts = lines.filter(l => l.startsWith('DTSTART')).map(l => l.split(':')[1]);
+      const alarms = lines.filter(l => l === 'BEGIN:VALARM').length;
+      // Every event whose alarm instant is still ahead of NOW must have one.
+      const expected = starts.filter(s => {
+        const ms = Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
+        return ms - 12 * 3600 * 1000 > NOW.getTime();
+      }).length;
+      expect(alarms).toBe(expected);
+    }
+  });
+});
+
+describe('buildCertReminderIcs — malformed and hostile certificate data', () => {
+  it('zero-pads a year below 1000 so DATE stays 8 digits', () => {
+    // OpenSSL can print a notAfter of e.g. year 50; V8 parses it rather than
+    // rejecting it, so the unparseable guard does not catch this. An unpadded
+    // year emits a 6-digit DATE, and importers reject the whole VCALENDAR.
+    const d = new Date(Date.UTC(50, 0, 10, 12, 0, 0));
+    d.setUTCFullYear(50); // Date.UTC maps 0-99 to 1900+; force the real year
+    const r = buildCertReminderIcs({
+      host: 'h', certValidTo: d.toISOString(), now: new Date(Date.UTC(49, 11, 1)),
+    });
+    structuralLines(r.ics)
+      .filter(l => l.startsWith('DTSTART') || l.startsWith('DTEND'))
+      .forEach(l => expect(l.split(':')[1]).toMatch(/^\d{8}$/));
+  });
+
+  it('keeps a DirName SAN intact instead of shearing it at its internal comma', () => {
+    const desc = structuralLines(build({
+      certSubjectAltName: 'DNS:a.example.com, DirName:/C=US, O=Example Ltd, DNS:b.example.com',
+    }).ics).find(l => l.startsWith('DESCRIPTION:'));
+    // The DirName must survive as ONE entry — its comma is data, not a separator.
+    expect(desc).toContain(String.raw`DirName:/C=US\, O=Example Ltd`);
+    expect(desc).toContain('DNS:a.example.com');
+    expect(desc).toContain('DNS:b.example.com');
+  });
+
+  it('still splits ordinary SAN entries on their real boundaries', () => {
+    const many = Array.from({ length: 25 }, (_, i) => `DNS:h${i}.example.com`).join(', ');
+    const desc = structuralLines(build({ certSubjectAltName: many }).ics)
+      .find(l => l.startsWith('DESCRIPTION:'));
+    expect(desc).toContain('and 15 more');
+  });
+});
+
+describe('countCertReminders — cheap path agrees with the builder', () => {
+  it('returns the same count, leadDays and reason without building a string', () => {
+    for (const days of [60, 20, 3, 2, -10]) {
+      const certValidTo = expiryInDays(days);
+      const cheap = countCertReminders({ certValidTo, now: NOW });
+      const full  = build({ certValidTo });
+      expect(cheap.count).toBe(full.count);
+      expect(cheap.leadDays).toEqual(full.leadDays);
+      expect(cheap.reason).toBe(full.reason);
+      expect(cheap.ics).toBeUndefined();   // no string work on this path
+    }
+  });
+
+  it('reports unparseable input the same way the builder does', () => {
+    expect(countCertReminders({ certValidTo: 'nope', now: NOW }).reason).toBe('unparseable');
   });
 });
 

@@ -202,6 +202,77 @@ export function exportTcpPingCsv({ host, port, useTls, attempts, stats }) {
   downloadFile(`tcpping_${host}_${port}_${timestamp()}.csv`, toCsv(rows), 'text/csv');
 }
 
+// ── MULTI-PING exports ────────────────────────────────────────────────────────
+
+/**
+ * Pure report builder, extracted from the download path for the same reason as
+ * buildSweepReport — Blob/URL.createObjectURL don't exist in the Node test
+ * environment, so the string-building has to be testable on its own.
+ *
+ * Iterates `slots`, not `results`: a slot can be removed while its results
+ * entry lingers, and reporting on a host that is no longer being monitored
+ * would be misleading.
+ */
+export function buildMultiPingReport({ slots, results }) {
+  const ts = new Date().toLocaleString();
+  const rows = (slots || []).filter(sl => sl.host && sl.host.trim());
+
+  const lines = [
+    '========================================',
+    '  Hana - Network Utility',
+    '  Multi-Ping Report',
+    '========================================',
+    `Timestamp  : ${ts}`,
+    `Hosts      : ${rows.length}`,
+    '',
+    'Host                           Status        RTT        Sent   Lost   Loss %   Last Seen',
+    '------------------------------ ------------- ---------- ------ ------ -------- -----------',
+  ];
+
+  rows.forEach(sl => {
+    const r = (results || {})[sl.id] || {};
+    const loss = r.sent > 0 ? ((r.lost / r.sent) * 100).toFixed(1) : '—';
+    lines.push(
+      [
+        String(sl.host).padEnd(30).slice(0, 30),
+        String(r.status || 'not started').padEnd(13),
+        (r.rtt != null ? `${r.rtt} ms` : '—').padEnd(10),
+        String(r.sent ?? 0).padEnd(6),
+        String(r.lost ?? 0).padEnd(6),
+        String(loss).padEnd(8),
+        r.lastSeen || '—',
+      ].join(' '),
+    );
+    if (r.errorMessage) lines.push(`  └ ${r.errorMessage}`);
+  });
+
+  return lines.join('\n');
+}
+
+export function exportMultiPingTxt({ slots, results }) {
+  downloadFile(`multiping_${timestamp()}.txt`, buildMultiPingReport({ slots, results }));
+}
+
+export function exportMultiPingCsv({ slots, results }) {
+  const ts = new Date().toLocaleString();
+  const rows = [['Host', 'Status', 'RTT_ms', 'Sent', 'Lost', 'Loss_%', 'Last_Seen', 'Error', 'Timestamp']];
+  (slots || []).filter(sl => sl.host && sl.host.trim()).forEach(sl => {
+    const r = (results || {})[sl.id] || {};
+    rows.push([
+      sl.host,
+      r.status || 'not started',
+      r.rtt ?? '',
+      r.sent ?? 0,
+      r.lost ?? 0,
+      r.sent > 0 ? ((r.lost / r.sent) * 100).toFixed(1) : '',
+      r.lastSeen || '',
+      r.errorMessage || '',
+      ts,
+    ]);
+  });
+  downloadFile(`multiping_${timestamp()}.csv`, toCsv(rows), 'text/csv');
+}
+
 // ── TLS CERT EXPIRY CALENDAR REMINDERS (.ics) ─────────────────────────────────
 //
 // Generates one iCalendar file holding up to four all-day reminder events
@@ -212,15 +283,26 @@ export function exportTcpPingCsv({ host, port, useTls, attempts, stats }) {
 // same reason buildSweepReport is: Blob/URL.createObjectURL don't exist in the
 // Node test environment, so the string-building has to be testable on its own.
 
-const ICS_LEAD_DAYS = [45, 30, 10, 3];
+export const ICS_LEAD_DAYS = [45, 30, 10, 3];
 const ICS_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 const ICS_MAX_SAN_SHOWN = 10;
 // Relative to DTSTART, which for an all-day event is midnight — so this
-// fires at noon on the preceding day.
-const ICS_ALARM_TRIGGER = '-PT12H';
+// fires at noon on the preceding day. ICS_ALARM_LEAD_MS must stay in step
+// with the trigger string: it's what decides whether an alarm would already
+// have elapsed, in which case it's omitted rather than emitted dead.
+export const ICS_ALARM_TRIGGER = '-PT12H';
+const ICS_ALARM_LEAD_MS = 12 * 60 * 60 * 1000;
+
+// Splits a Node `subjectaltname` string on entry boundaries only. A plain
+// split(',') shears entries whose value legitimately contains a comma —
+// `DirName:/C=US, O=Example` — into two fragments, each of which then reads
+// like an independent hostname. The lookahead requires the next token to
+// look like an entry prefix (`DNS:`, `IP Address:`, `DirName:`), which
+// `O=Example` does not.
+const SAN_ENTRY_BOUNDARY = /,\s*(?=[A-Za-z][A-Za-z0-9 .-]*:)/;
 
 /**
  * Escape a value for an iCalendar TEXT property (RFC 5545 §3.3.11).
@@ -267,7 +349,6 @@ export function icsEscapeText(value) {
  * Always call this AFTER escaping, on the fully assembled property line.
  */
 export function icsFoldLine(line) {
-  const enc = new TextEncoder();
   const chars = Array.from(String(line));
   const segments = [];
   let cur = [];
@@ -275,7 +356,12 @@ export function icsFoldLine(line) {
   let limit = 75;
 
   for (const ch of chars) {
-    const chBytes = enc.encode(ch).length;
+    // Derived arithmetically rather than via TextEncoder.encode(ch).length,
+    // which allocated a Uint8Array per character — ~13x slower over a whole
+    // document. Array.from gives whole code points, so codePointAt(0) is the
+    // full character and these four ranges are the complete UTF-8 encoding.
+    const cp = ch.codePointAt(0);
+    const chBytes = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
     if (bytes + chBytes > limit) {
       // Don't end a segment mid-escape-sequence. An odd run of trailing
       // backslashes means the last one opens an escape whose partner would
@@ -298,7 +384,11 @@ export function icsFoldLine(line) {
 }
 
 function icsDate(d) {
-  return String(d.getUTCFullYear())
+  // The year is padded too: a certificate whose notAfter parses to a year
+  // below 1000 would otherwise emit a 6-digit DATE like `500101`, which is
+  // malformed — and importers typically reject the whole VCALENDAR rather
+  // than the one bad event.
+  return String(d.getUTCFullYear()).padStart(4, '0')
     + String(d.getUTCMonth() + 1).padStart(2, '0')
     + String(d.getUTCDate()).padStart(2, '0');
 }
@@ -324,7 +414,7 @@ function formatExpiryDisplay(d) {
 // names), so only the first few reach the description.
 function formatSanList(raw) {
   if (!raw) return null;
-  const entries = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  const entries = String(raw).split(SAN_ENTRY_BOUNDARY).map(s => s.trim()).filter(Boolean);
   if (entries.length === 0) return null;
   const shown = entries.slice(0, ICS_MAX_SAN_SHOWN);
   const extra = entries.length - shown.length;
@@ -332,29 +422,21 @@ function formatSanList(raw) {
 }
 
 /**
- * Build the .ics payload for a certificate's expiry reminders.
+ * Which reminders are still worth scheduling, and why not if none are.
  *
- * Returns { ics, count, leadDays, reason } — `ics` is null when there is
- * nothing worth scheduling, with `reason` distinguishing the two cases so the
- * caller can say something accurate:
+ * Shared by countCertReminders and buildCertReminderIcs so the number the UI
+ * shows can never disagree with the number of events in the file.
+ *
+ * reason is one of:
  *   'unparseable' — the certificate's valid_to string couldn't be read
- *   'expired'     — already expired, or too close to expiry for any reminder
- *                   to still be in the future
- *
- * Callers should drive their UI off the returned `count`, never off a
- * separately-computed days-remaining value: that number is calculated when the
- * probe runs, and can disagree with this by a day at boundaries.
- *
- * `now` is injectable so DTSTAMP and the future-date filter are testable.
+ *   'expired'     — the certificate has already lapsed
+ *   'too-soon'    — still valid, but every lead time is already behind us
+ *   null          — there is at least one reminder to schedule
  */
-export function buildCertReminderIcs({
-  host, certValidTo, certSubjectCN, certIssuerCN, certSubjectAltName,
-  now = new Date(),
-} = {}) {
+function computeReminderDates(certValidTo, now) {
   const expiryMs = certValidTo ? Date.parse(certValidTo) : NaN;
-  if (isNaN(expiryMs)) {
-    return { ics: null, count: 0, leadDays: [], reason: 'unparseable' };
-  }
+  if (isNaN(expiryMs)) return { events: [], reason: 'unparseable', expiry: null };
+
   const expiry = new Date(expiryMs);
 
   // Anchor everything on UTC calendar days. UTC has no DST, so subtracting
@@ -370,8 +452,43 @@ export function buildCertReminderIcs({
     d.setUTCDate(d.getUTCDate() - lead);
     if (d.getTime() >= todayDay) events.push({ lead, date: d });
   }
+
+  const reason = events.length > 0
+    ? null
+    : (expiryMs <= now.getTime() ? 'expired' : 'too-soon');
+
+  return { events, reason, expiry };
+}
+
+/**
+ * How many reminders a certificate would produce, without building the file.
+ *
+ * The UI drives its button label and enabled state off this rather than off a
+ * days-remaining figure computed when the probe ran — that number can disagree
+ * by a day at boundaries, which would let the label promise a different number
+ * of events than the download actually contains.
+ */
+export function countCertReminders({ certValidTo, now = new Date() } = {}) {
+  const { events, reason } = computeReminderDates(certValidTo, now);
+  return { count: events.length, leadDays: events.map(e => e.lead), reason };
+}
+
+/**
+ * Build the .ics payload for a certificate's expiry reminders.
+ *
+ * Returns { ics, count, leadDays, reason }; `ics` is null when there is
+ * nothing worth scheduling and `reason` says why (see computeReminderDates).
+ *
+ * `now` is injectable so DTSTAMP, the future-date filter, and the alarm
+ * elapsed-check are all testable.
+ */
+export function buildCertReminderIcs({
+  host, certValidTo, certSubjectCN, certIssuerCN, certSubjectAltName,
+  now = new Date(),
+} = {}) {
+  const { events, reason, expiry } = computeReminderDates(certValidTo, now);
   if (events.length === 0) {
-    return { ics: null, count: 0, leadDays: [], reason: 'expired' };
+    return { ics: null, count: 0, leadDays: [], reason };
   }
 
   const titleHost    = host || certSubjectCN || 'unknown host';
@@ -379,7 +496,7 @@ export function buildCertReminderIcs({
   const sanList      = formatSanList(certSubjectAltName);
   const expiryText   = formatExpiryDisplay(expiry);
   const dtstamp      = icsDateTimeUtc(now);
-  const expiryStamp  = icsDate(new Date(expiryDay));
+  const expiryStamp  = icsDate(expiry);
   const uidHost      = String(host || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
 
   const lines = [
@@ -418,19 +535,31 @@ export function buildCertReminderIcs({
       `DTEND;VALUE=DATE:${icsDate(end)}`,
       `SUMMARY:${icsEscapeText(summary)}`,
       `DESCRIPTION:${icsEscapeText(desc.join('\n'))}`,
-      // Without a VALARM, whether the user is notified at all is left to each
-      // calendar client's default for all-day events — which is commonly no
-      // notification, making the reminder useless unless they happen to be
-      // looking at that day. TRIGGER is relative to DTSTART (§3.8.6.3), and
-      // all-day events start at midnight, so -PT12H fires at noon the day
-      // before rather than at an unhelpful midnight.
-      'BEGIN:VALARM',
-      'ACTION:DISPLAY',
-      `TRIGGER:${ICS_ALARM_TRIGGER}`,
-      `DESCRIPTION:${icsEscapeText(summary)}`,
-      'END:VALARM',
-      'END:VEVENT',
     );
+
+    // Without a VALARM, whether the user is notified at all is left to each
+    // calendar client's default for all-day events — which is commonly no
+    // notification. TRIGGER is relative to DTSTART (§3.8.6.3), and all-day
+    // events start at midnight, so -PT12H fires at noon the day before.
+    //
+    // But an event dated today would put that alarm at noon YESTERDAY, and
+    // clients discard already-elapsed alarms on import — which silently killed
+    // the notification on the single most urgent reminder. When the alarm
+    // would already have passed, the event still goes on the calendar; it just
+    // doesn't carry a dead alarm. The instant is approximated in UTC, and the
+    // comparison deliberately errs toward omitting: a missing popup is visible,
+    // whereas one the client silently drops is not.
+    if (ev.date.getTime() - ICS_ALARM_LEAD_MS > now.getTime()) {
+      lines.push(
+        'BEGIN:VALARM',
+        'ACTION:DISPLAY',
+        `TRIGGER:${ICS_ALARM_TRIGGER}`,
+        `DESCRIPTION:${icsEscapeText(summary)}`,
+        'END:VALARM',
+      );
+    }
+
+    lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');
 
@@ -438,6 +567,7 @@ export function buildCertReminderIcs({
     ics: lines.map(icsFoldLine).join('\r\n') + '\r\n',
     count: events.length,
     leadDays: events.map(e => e.lead),
+    reason, // null on success — keeps the shape identical across both paths
   };
 }
 

@@ -1105,9 +1105,20 @@ ipcMain.on('tcpping-start', (event, { host, port, count, timeoutMs, tls: useTls 
               // Attacker-controlled and unbounded (shared certs can carry
               // hundreds of entries), so it is capped here rather than trusted
               // to be small; consumers escape it again before rendering.
-              certSubjectAltName = typeof cert.subjectaltname === 'string'
-                ? cert.subjectaltname.slice(0, 4096)
-                : null;
+              //
+              // The cap is trimmed back to the last complete entry: cutting at
+              // a fixed offset can leave a fragment like "DNS:parti", which
+              // then renders in the UI and in calendar reminders as though it
+              // were a real hostname.
+              if (typeof cert.subjectaltname === 'string') {
+                let san = cert.subjectaltname;
+                if (san.length > 4096) {
+                  san = san.slice(0, 4096);
+                  const lastBoundary = san.lastIndexOf(',');
+                  if (lastBoundary > 0) san = san.slice(0, lastBoundary);
+                }
+                certSubjectAltName = san;
+              }
             }
           } catch {
             // Defensive only — getPeerCertificate() shouldn't throw post-handshake.

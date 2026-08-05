@@ -1,10 +1,10 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { classifyLatency } from '../utils/latency';
 import { classifyCertExpiry } from '../utils/certExpiry';
 import { computeTcpPingStats } from '../utils/tcpPingStats';
 import {
   exportTcpPingTxt, exportTcpPingCsv,
-  buildCertReminderIcs, exportCertRemindersIcs,
+  countCertReminders, exportCertRemindersIcs,
 } from '../utils/export';
 import { validateHost, validatePorts, validateTcpPingTimeout, validatePingCount } from '../lib/validate';
 import Instructions from './Instructions';
@@ -185,28 +185,46 @@ export default function TcpPing({ state, setState }) {
     setState(prev => ({ ...prev, attempts: [], errorMsg: null, running: false }));
   }
 
+  // The export rebuilds against a fresh clock, so it can legitimately come back
+  // with nothing even though the button was showing a count — a cert can cross
+  // below three days, or UTC midnight can pass, between render and click.
+  // Previously that path returned silently: no file, no error, no change on
+  // screen. Now it says what happened instead of appearing to do nothing.
+  function exportReminders() {
+    const result = exportCertRemindersIcs({
+      host: state.host,
+      certValidTo:        certAttempt.certValidTo,
+      certSubjectCN:      certAttempt.certSubjectCN,
+      certIssuerCN:       certAttempt.certIssuerCN,
+      certSubjectAltName: certAttempt.certSubjectAltName,
+    });
+    if (result.count === 0) {
+      set({
+        errorMsg: result.reason === 'unparseable'
+          ? 'Certificate expiry date couldn’t be read, so no reminders were created.'
+          : 'This certificate is now too close to expiry to schedule reminders — renew it instead.',
+      });
+    }
+  }
+
   const stats       = computeTcpPingStats(state.attempts);
   const latInfo     = stats.avg != null ? classifyLatency(stats.avg) : null;
   const hasData     = state.attempts.length > 0;
   const certAttempt = state.useTls ? mostRecentCert(state.attempts) : null;
   const certInfo    = certAttempt ? classifyCertExpiry(certAttempt.certDaysRemaining) : null;
 
-  // Preview what the .ics export would produce, so the button's label and
-  // enabled state come from the same builder that writes the file — never
-  // from certDaysRemaining, which is computed at probe time and can disagree
-  // by a day at boundaries. (The download re-runs the builder against a fresh
-  // clock, so the file is always right even if this preview goes stale after
-  // a UTC midnight in a long-idle session.)
-  const certReminders = useMemo(() => (certAttempt ? buildCertReminderIcs({
-    host: state.host,
-    certValidTo:        certAttempt.certValidTo,
-    certSubjectCN:      certAttempt.certSubjectCN,
-    certIssuerCN:       certAttempt.certIssuerCN,
-    certSubjectAltName: certAttempt.certSubjectAltName,
-  }) : null), [certAttempt, state.host]);
-
-  const certExpiryMs  = certAttempt ? Date.parse(certAttempt.certValidTo) : NaN;
-  const alreadyExpired = !isNaN(certExpiryMs) && certExpiryMs < Date.now();
+  // What the .ics export would produce, so the button's label comes from the
+  // same date logic that writes the file — never from certDaysRemaining, which
+  // is computed at probe time and can disagree by a day at boundaries.
+  //
+  // Computed fresh each render rather than memoized: the cheap path does no
+  // string building, and a memo would freeze this against a stale clock, which
+  // is exactly how the label came to promise a download that then produced
+  // nothing. `reason` also tells the two zero cases apart, so the component
+  // doesn't need to re-parse the expiry date itself.
+  const certReminders = certAttempt
+    ? countCertReminders({ certValidTo: certAttempt.certValidTo })
+    : null;
 
   return (
     <div style={s.wrap}>
@@ -288,22 +306,15 @@ export default function TcpPing({ state, setState }) {
         {certReminders && certReminders.count > 0 && (
           <button style={s.icsBtn}
             title={`Adds ${certReminders.count} all-day reminder${certReminders.count === 1 ? '' : 's'} (${certReminders.leadDays.join(', ')} days before expiry) to your calendar`}
-            onClick={() => exportCertRemindersIcs({
-              host: state.host,
-              certValidTo:        certAttempt.certValidTo,
-              certSubjectCN:      certAttempt.certSubjectCN,
-              certIssuerCN:       certAttempt.certIssuerCN,
-              certSubjectAltName: certAttempt.certSubjectAltName,
-            })}>
+            onClick={exportReminders}>
             🗓 Calendar reminders ({certReminders.count})
           </button>
         )}
-        {certReminders && certReminders.count === 0 && certReminders.reason === 'expired' && (
-          <span style={s.icsUrgent}>
-            {alreadyExpired
-              ? '⚠ Certificate has already expired — renew now.'
-              : '⚠ Expires too soon to schedule reminders — renew now.'}
-          </span>
+        {certReminders && certReminders.reason === 'expired' && (
+          <span style={s.icsUrgent}>⚠ Certificate has already expired — renew now.</span>
+        )}
+        {certReminders && certReminders.reason === 'too-soon' && (
+          <span style={s.icsUrgent}>⚠ Expires too soon to schedule reminders — renew now.</span>
         )}
         {certReminders && certReminders.reason === 'unparseable' && (
           <span style={s.icsNote}>Certificate expiry date couldn’t be read.</span>

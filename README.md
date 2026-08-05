@@ -49,6 +49,7 @@ Monitor up to 5 hosts simultaneously on a single screen.
 - Global status bar shows total up vs down count instantly
 - Hosts keep pinging in the background while you use other modules
 - Designed for watching devices come back online after a reboot or failover
+- Export the monitoring summary as `.txt` or `.csv`
 
 ### ⇄ TCP Ping
 Repeatedly probe a specific host:port — the complement to ICMP ping for when
@@ -269,6 +270,7 @@ npm run build          # produce an installer in dist/
 
 | Version | Highlights |
 |---|---|
+| v1.11.7 | Calendar reminders now raise a notification at noon the day before (and never attach an already-elapsed alarm); sidebar grouped by purpose; Multi-Ping gained Export and Clear |
 | v1.11.6 | Certificate expiry calendar reminders — export a `.ics` with all-day reminders at 45/30/10/3 days before a TLS certificate expires; SAN list now captured and shown |
 | v1.11.5 | TCP Ping shows TLS certificate expiry (color-coded); IP Info gains a Local Network interface selector (defaults to wired, falls back to WiFi); Subnet Sweep pagination and a "Live hosts only" filter actually shipped (previously documented but never wired up since v1.7.0) |
 | v1.11.0 | TCP Ping — repeated TCP-connect probing of a host:port with DNS/connect/TLS phase timing, failure classification, jitter, and failure-streak tracking; sidebar module order regrouped by category |

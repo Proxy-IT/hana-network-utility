@@ -160,24 +160,46 @@ thousands of entries.
 
 ---
 
-## Unreleased
+## v1.11.7 — August 2026
 
-### Calendar reminders now actually notify
+A polish release — clearer navigation, more complete exports, and more
+reliable certificate reminders. No new modules.
 
-The `.ics` events shipped in v1.11.6 carried no alarm, which left it to each
-calendar client's default for all-day events whether the user was notified at
-all — commonly that default is no notification, so the reminder only worked if
-you happened to be looking at your calendar that day.
+### Calendar reminders now raise a notification
 
-Each event now carries a `VALARM` (`ACTION:DISPLAY`) firing at **noon the day
-before**. `TRIGGER` is relative to `DTSTART` and all-day events start at
-midnight, so the offset is `-PT12H`; a zero offset would technically be "on
-time" but would fire at midnight, which nobody sees.
+Exported `.ics` events carry a display alarm set for **noon the day before**
+each reminder, so they announce themselves rather than depending on how your
+calendar is configured for all-day events.
 
-Not released on its own — v1.11.6 was already published, and re-cutting the
-same version number would leave anyone already on it permanently unable to
-receive this, since the auto-updater identifies builds by version alone. This
-rides along with the next release instead.
+A reminder that falls on the current day is written without an alarm, since an
+alarm timed for the previous day would be discarded on import — the event still
+appears on your calendar.
+
+> **If you exported reminders from v1.11.6, export them again.** Those files
+> contain no alarms and may not notify you.
+
+### Sidebar grouped by purpose
+
+Modules are now organised under **Connectivity**, **Discovery**, **Lookup**,
+and **Reference**, making the toolset quicker to scan and keeping related tools
+together. Every module keeps its name and behaviour, and the navigation scrolls
+on shorter windows.
+
+### Multi-Ping export
+
+Multi-Ping now offers `.txt` and `.csv` export alongside a Clear action.
+Reports cover the hosts currently configured, and Clear keeps your host list so
+you can restart a session without retyping it.
+
+### Additional fixes
+
+- The reminders button now reports the outcome when a certificate moves too
+  close to expiry between being viewed and exported.
+- Certificates with unusual expiry dates now produce a valid calendar file.
+- "Expired" and "expiring too soon to schedule" are reported distinctly.
+- Certificate `DirName:` subject-alternative names are read as single entries,
+  and long SAN lists are truncated at an entry boundary.
+- Calendar file generation is substantially faster.
 
 ---
 

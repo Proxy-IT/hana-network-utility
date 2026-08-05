@@ -1,17 +1,44 @@
 import React from 'react';
 
-const TABS = [
-  { id: 'ping',      label: 'Ping',          icon: '◎' },
-  { id: 'multiping', label: 'Multi-Ping',    icon: '⊛' },
-  { id: 'tcpping',   label: 'TCP Ping',      icon: '⇄' },
-  { id: 'ports',     label: 'Port Scanner',  icon: '⊘' },
-  { id: 'tracert',   label: 'Traceroute',    icon: '⤵' },
-  { id: 'sweep',     label: 'Subnet Sweep',  icon: '⊞' },
-  { id: 'subnet',    label: 'Subnet Calc',   icon: '⊟' },
-  { id: 'dns',       label: 'DNS Lookup',    icon: '◈' },
-  { id: 'ipinfo',    label: 'IP Info',       icon: '⊕' },
-  { id: 'links',     label: "Hana's Favs",   icon: '↗' },
-  { id: 'latency',   label: 'Latency Guide', icon: '≋' },
+// Grouped so an eleven-item list reads as four short ones. Three of these
+// modules have "Ping" in the name and a new user can't tell them apart from a
+// flat list; the headers give them a shared context instead.
+//
+// Subnet Sweep and Subnet Calc are deliberately in DIFFERENT groups — they
+// were adjacent and near-identically named, which is the other pair people
+// confuse. One scans a range, the other does arithmetic.
+const TAB_GROUPS = [
+  {
+    title: 'Connectivity',
+    tabs: [
+      { id: 'ping',      label: 'Ping',          icon: '◎' },
+      { id: 'multiping', label: 'Multi-Ping',    icon: '⊛' },
+      { id: 'tcpping',   label: 'TCP Ping',      icon: '⇄' },
+      { id: 'tracert',   label: 'Traceroute',    icon: '⤵' },
+    ],
+  },
+  {
+    title: 'Discovery',
+    tabs: [
+      { id: 'ports',     label: 'Port Scanner',  icon: '⊘' },
+      { id: 'sweep',     label: 'Subnet Sweep',  icon: '⊞' },
+    ],
+  },
+  {
+    title: 'Lookup',
+    tabs: [
+      { id: 'dns',       label: 'DNS Lookup',    icon: '◈' },
+      { id: 'ipinfo',    label: 'IP Info',       icon: '⊕' },
+    ],
+  },
+  {
+    title: 'Reference',
+    tabs: [
+      { id: 'subnet',    label: 'Subnet Calc',   icon: '⊟' },
+      { id: 'latency',   label: 'Latency Guide', icon: '≋' },
+      { id: 'links',     label: "Hana's Favs",   icon: '↗' },
+    ],
+  },
 ];
 
 export default function Sidebar({ active, onSelect, sysInfo }) {
@@ -47,14 +74,19 @@ export default function Sidebar({ active, onSelect, sysInfo }) {
 
       {/* Nav */}
       <nav style={s.nav}>
-        {TABS.map(tab => (
-          <button key={tab.id}
-            style={{ ...s.navItem, ...(active === tab.id ? s.navItemActive : {}) }}
-            onClick={() => onSelect(tab.id)}>
-            <span style={s.navIcon}>{tab.icon}</span>
-            <span style={s.navLabel}>{tab.label}</span>
-            {active === tab.id && <span style={s.navIndicator} />}
-          </button>
+        {TAB_GROUPS.map(group => (
+          <React.Fragment key={group.title}>
+            <div style={s.navGroupLabel}>{group.title}</div>
+            {group.tabs.map(tab => (
+              <button key={tab.id}
+                style={{ ...s.navItem, ...(active === tab.id ? s.navItemActive : {}) }}
+                onClick={() => onSelect(tab.id)}>
+                <span style={s.navIcon}>{tab.icon}</span>
+                <span style={s.navLabel}>{tab.label}</span>
+                {active === tab.id && <span style={s.navIndicator} />}
+              </button>
+            ))}
+          </React.Fragment>
         ))}
       </nav>
 
@@ -109,7 +141,12 @@ const s = {
   brandSub: { fontSize: 9, color: '#3D4D65', textTransform: 'uppercase', letterSpacing: '0.1em', lineHeight: 1 },
 
   divider: { height: 1, background: '#1E2D45', margin: '0 14px' },
-  nav: { flex: 1, display: 'flex', flexDirection: 'column', padding: '10px 8px', gap: 2, WebkitAppRegion: 'no-drag' },
+  // minHeight/overflowY guard against the group headers pushing the lower
+  // items — and the About button below the nav — out of reach on a short window.
+  nav: { flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', padding: '10px 8px', gap: 2, WebkitAppRegion: 'no-drag' },
+  // Matches the app's canonical small-uppercase label (brandSub, sysLabel, and
+  // every module's field/section labels).
+  navGroupLabel: { fontSize: 10, color: '#3D4D65', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 500, padding: '10px 10px 4px' },
 
   navItem: { display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 6, border: 'none', background: 'transparent', color: '#8892A4', cursor: 'pointer', fontSize: 13, fontFamily: 'Inter, sans-serif', textAlign: 'left', position: 'relative', WebkitAppRegion: 'no-drag', transition: 'all 0.15s ease' },
   navItemActive: { background: 'rgba(0,212,255,0.08)', color: '#00D4FF', fontWeight: 500 },
