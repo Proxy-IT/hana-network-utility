@@ -3,6 +3,8 @@ import {
   buildSweepReport, csvCell,
   icsEscapeText, icsFoldLine, buildCertReminderIcs, countCertReminders,
   buildMultiPingReport,
+  buildDnsReport, buildDnsCsvRows,
+  buildPortScanReport, buildPortScanCsvRows,
 } from '../export.js';
 
 /**
@@ -600,5 +602,129 @@ describe('buildCertReminderIcs — determinism', () => {
     expect(uids).toEqual(structuralLines(build().ics).filter(l => l.startsWith('UID:')));
     expect(new Set(uids).size).toBe(4);
     uids.forEach(u => expect(u).toContain('@hana.proxy-it.co'));
+  });
+});
+
+// ── DNS Lookup + Port Scanner exports ─────────────────────────────────────────
+
+/**
+ * Both modules built their own CSV and their own download until this suite was
+ * written. DnsLookup.js used `rows.map(r => r.map(v => `"${v}"`).join(','))` —
+ * the pre-csvCell pattern, which neither doubles an embedded quote nor
+ * neutralizes a leading '='. It shipped in v1.6.0 and survived the v1.8.2
+ * hardening pass, which fixed the byte-identical line in PortScanner.js and
+ * stopped there rather than sweeping for the pattern.
+ *
+ * DNS was the worst module to have carried it: record values come from whoever
+ * controls the zone, and TXT records (SPF, DKIM, DMARC) are free-form strings
+ * that routinely contain literal double-quotes even with no attacker involved.
+ *
+ * `csvOf` mirrors the private toCsv() that exportDnsCsv/exportScanCsv call, so
+ * these assert the bytes that actually reach the file.
+ */
+
+const csvOf = rows => rows.map(r => r.map(csvCell).join(',')).join('\n');
+
+describe('buildDnsReport', () => {
+  const base = { host: 'google.com', type: 'ALL', server: '8.8.8.8' };
+
+  it('carries the correct branding and query metadata', () => {
+    const txt = buildDnsReport({ ...base, results: [{ type: 'A', value: '1.2.3.4', ttl: 299 }] });
+    expect(txt).toContain('Hana - Network Utility');
+    expect(txt).toContain('DNS Lookup Report');
+    expect(txt).not.toContain('Look Look');
+    expect(txt).toContain('Host       : google.com');
+    expect(txt).toContain('Record Type: ALL');
+    expect(txt).toContain('DNS Server : 8.8.8.8');
+  });
+
+  it('renders priority and TTL only when each is present', () => {
+    const txt = buildDnsReport({
+      ...base,
+      results: [
+        { type: 'MX', value: 'smtp.google.com', priority: 10, ttl: null },
+        { type: 'A',  value: '1.2.3.4', ttl: 299 },
+      ],
+    });
+    expect(txt).toMatch(/MX\s+smtp\.google\.com \(priority: 10\)/);
+    expect(txt).not.toMatch(/smtp\.google\.com.*TTL/);
+    expect(txt).toMatch(/A\s+1\.2\.3\.4 TTL: 299s/);
+  });
+
+  it('tolerates a missing results array instead of throwing', () => {
+    expect(() => buildDnsReport(base)).not.toThrow();
+    expect(buildDnsReport(base)).toContain('--- Results ---');
+  });
+});
+
+describe('buildDnsCsvRows — injection and delimiter safety', () => {
+  const base = { host: 'example.test', type: 'TXT', server: '8.8.8.8' };
+  const rowsFor = value => buildDnsCsvRows({ ...base, results: [{ type: 'TXT', value, ttl: 300 }] });
+
+  it('keeps the documented column order', () => {
+    // Fixed-index parsers downstream depend on this; reordering silently breaks them.
+    expect(rowsFor('x')[0]).toEqual(
+      ['Type', 'Value', 'Priority', 'TTL', 'Host', 'DNS_Server', 'Timestamp'],
+    );
+  });
+
+  it('neutralizes a TXT record that starts with = so Excel cannot execute it', () => {
+    const csv = csvOf(rowsFor('=HYPERLINK("http://evil.test","click")'));
+    expect(csv).toContain(`"'=HYPERLINK(""http://evil.test"",""click"")"`);
+    // The v1.6.0 output — executable on open, and column-breaking.
+    expect(csv).not.toContain('"=HYPERLINK');
+  });
+
+  it('doubles the quotes in a real SPF record instead of breaking the row', () => {
+    // No attacker needed: this is what an ordinary SPF lookup returns.
+    const csv = csvOf(rowsFor('v=spf1 include:"_spf.example.com" ~all'));
+    expect(csv).toContain('"v=spf1 include:""_spf.example.com"" ~all"');
+  });
+
+  it('keeps a comma-bearing value inside a single cell', () => {
+    const csv = csvOf(rowsFor('a,b,c'));
+    expect(csv).toContain('"a,b,c"');
+    expect(csv.split('\n')[1].split('","').length).toBe(7);
+  });
+
+  it('leaves plain values untouched so they stay numeric', () => {
+    const rows = buildDnsCsvRows({ ...base, results: [{ type: 'A', value: '1.2.3.4', ttl: 299 }] });
+    expect(csvOf(rows)).toContain('"299"');
+  });
+});
+
+describe('buildPortScanReport / buildPortScanCsvRows', () => {
+  const results = [
+    { port: 443, service: 'HTTPS', status: 'open' },
+    { port: 22,  service: 'SSH',   status: 'closed' },
+    { port: 80,  service: null,    status: 'open' },
+  ];
+
+  it('sorts by port without mutating the caller array', () => {
+    // `results` is React state in PortScanner; the previous in-place .sort()
+    // reordered it behind React's back.
+    const input = results.map(r => ({ ...r }));
+    const before = input.map(r => r.port);
+    buildPortScanReport({ host: 'h', results: input });
+    buildPortScanCsvRows({ host: 'h', results: input });
+    expect(input.map(r => r.port)).toEqual(before);
+  });
+
+  it('emits rows in ascending port order', () => {
+    const rows = buildPortScanCsvRows({ host: 'h', results });
+    expect(rows.slice(1).map(r => r[0])).toEqual([22, 80, 443]);
+  });
+
+  it('reports the open count and falls back to Unknown for an unnamed service', () => {
+    const txt = buildPortScanReport({ host: 'h', results });
+    expect(txt).toContain('Hana - Network Utility');
+    expect(txt).toContain('Scanned   : 3 ports');
+    expect(txt).toContain('Open      : 2');
+    expect(txt).toMatch(/80\s+Unknown\s+OPEN/);
+  });
+
+  it('tolerates a missing results array instead of throwing', () => {
+    expect(() => buildPortScanReport({ host: 'h' })).not.toThrow();
+    expect(buildPortScanCsvRows({ host: 'h' })).toHaveLength(1);
   });
 });

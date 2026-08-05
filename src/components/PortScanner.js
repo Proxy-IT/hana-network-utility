@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Instructions from './Instructions';
 import ExportBar from './ExportBar';
-import { csvCell } from '../utils/export';
+import { exportScanTxt, exportScanCsv } from '../utils/export';
 
 const isBrowser = !window.electronAPI;
 
@@ -58,47 +58,6 @@ const INSTRUCTIONS = {
 
 function getService(port) {
   return COMMON_PORTS.find(p => p.port === port)?.service || 'Unknown';
-}
-
-function exportScanTxt({ host, results }) {
-  const ts   = new Date().toLocaleString();
-  const open = results.filter(r => r.status === 'open');
-  const lines = [
-    '========================================',
-    '  Hana - Network Utility',
-    '  Port Scan Report',
-    '========================================',
-    `Target    : ${host}`,
-    `Timestamp : ${ts}`,
-    `Scanned   : ${results.length} ports`,
-    `Open      : ${open.length}`,
-    '',
-    '--- Results ---',
-    'PORT     SERVICE          STATUS',
-    '-------- ---------------- ----------',
-    ...results.sort((a,b) => a.port - b.port).map(r =>
-      `${String(r.port).padEnd(8)} ${(r.service || 'Unknown').padEnd(16)} ${r.status.toUpperCase()}`
-    ),
-  ];
-  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `portscan_${host}_${Date.now()}.txt`;
-  a.click();
-}
-
-function exportScanCsv({ host, results }) {
-  const ts  = new Date().toLocaleString();
-  const rows = [
-    ['Port', 'Service', 'Status', 'Host', 'Timestamp'],
-    ...results.sort((a,b) => a.port - b.port).map(r => [r.port, r.service || 'Unknown', r.status, host, ts]),
-  ];
-  const csv = rows.map(r => r.map(csvCell).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `portscan_${host}_${Date.now()}.csv`;
-  a.click();
 }
 
 export default function PortScanner() {

@@ -641,6 +641,102 @@ export function exportTraceCsv({ host, hops }) {
   downloadFile(`traceroute_${host}_${timestamp()}.csv`, csv, 'text/csv');
 }
 
+// ── DNS LOOKUP exports ────────────────────────────────────────────────────────
+
+// These lived inside DnsLookup.js until they were moved here. That copy built its
+// CSV with `r.map(v => `"${v}"`)`, which neither escaped embedded quotes nor
+// guarded against formula injection — the exact flaw csvCell exists to prevent.
+// It matters most here: DNS record values are supplied by whoever controls the
+// zone, and TXT records (SPF/DKIM) routinely contain literal double-quotes.
+
+export function buildDnsReport({ host, type, server, results }) {
+  const ts = new Date().toLocaleString();
+  return [
+    '========================================',
+    '  Hana - Network Utility',
+    '  DNS Lookup Report',
+    '========================================',
+    `Host       : ${host}`,
+    `Record Type: ${type}`,
+    `DNS Server : ${server}`,
+    `Timestamp  : ${ts}`,
+    '',
+    '--- Results ---',
+    ...(results || []).map(r =>
+      `${String(r.type).padEnd(6)} ${r.value}${r.priority != null ? ` (priority: ${r.priority})` : ''}${r.ttl != null ? ` TTL: ${r.ttl}s` : ''}`
+    ),
+  ].join('\n');
+}
+
+// Exported separately from exportDnsCsv so the injection-sensitive row assembly
+// is unit-testable without Blob/URL.createObjectURL.
+export function buildDnsCsvRows({ host, type, server, results }) {
+  const ts = new Date().toLocaleString();
+  return [
+    ['Type', 'Value', 'Priority', 'TTL', 'Host', 'DNS_Server', 'Timestamp'],
+    ...(results || []).map(r => [r.type, r.value, r.priority ?? '', r.ttl ?? '', host, server, ts]),
+  ];
+}
+
+export function exportDnsTxt({ host, type, server, results }) {
+  downloadFile(`dns_${host}_${timestamp()}.txt`, buildDnsReport({ host, type, server, results }));
+}
+
+export function exportDnsCsv({ host, type, server, results }) {
+  const csv = toCsv(buildDnsCsvRows({ host, type, server, results }));
+  downloadFile(`dns_${host}_${timestamp()}.csv`, csv, 'text/csv');
+}
+
+// ── PORT SCANNER exports ──────────────────────────────────────────────────────
+
+// Moved out of PortScanner.js. That copy already used csvCell, so it was safe
+// against injection, but it hand-rolled the Blob/anchor download (leaking every
+// object URL) and sorted `results` — a React state array — in place.
+
+function sortedPorts(results) {
+  return [...(results || [])].sort((a, b) => a.port - b.port);
+}
+
+export function buildPortScanReport({ host, results }) {
+  const ts   = new Date().toLocaleString();
+  const all  = sortedPorts(results);
+  const open = all.filter(r => r.status === 'open');
+  return [
+    '========================================',
+    '  Hana - Network Utility',
+    '  Port Scan Report',
+    '========================================',
+    `Target    : ${host}`,
+    `Timestamp : ${ts}`,
+    `Scanned   : ${all.length} ports`,
+    `Open      : ${open.length}`,
+    '',
+    '--- Results ---',
+    'PORT     SERVICE          STATUS',
+    '-------- ---------------- ----------',
+    ...all.map(r =>
+      `${String(r.port).padEnd(8)} ${(r.service || 'Unknown').padEnd(16)} ${String(r.status).toUpperCase()}`
+    ),
+  ].join('\n');
+}
+
+export function buildPortScanCsvRows({ host, results }) {
+  const ts = new Date().toLocaleString();
+  return [
+    ['Port', 'Service', 'Status', 'Host', 'Timestamp'],
+    ...sortedPorts(results).map(r => [r.port, r.service || 'Unknown', r.status, host, ts]),
+  ];
+}
+
+export function exportScanTxt({ host, results }) {
+  downloadFile(`portscan_${host}_${timestamp()}.txt`, buildPortScanReport({ host, results }));
+}
+
+export function exportScanCsv({ host, results }) {
+  const csv = toCsv(buildPortScanCsvRows({ host, results }));
+  downloadFile(`portscan_${host}_${timestamp()}.csv`, csv, 'text/csv');
+}
+
 // ── SUBNET SWEEP exports ──────────────────────────────────────────────────────
 
 // Pure string-builder, extracted from exportSweepTxt so it can be unit tested

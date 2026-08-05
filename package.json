@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check:ipc": "node scripts/check-ipc-contract.js",
-    "preflight": "npm run check:ipc && npm run test",
+    "check:patterns": "node scripts/check-patterns.js",
+    "preflight": "npm run check:ipc && npm run check:patterns && npm run test",
     "audit:before": "npm audit > audit-before.txt 2>&1",
     "audit:after": "npm audit > audit-after.txt 2>&1",
     "audit:prod": "npm audit --omit=dev"

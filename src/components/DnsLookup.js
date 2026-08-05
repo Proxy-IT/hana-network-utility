@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Instructions from './Instructions';
 import ExportBar from './ExportBar';
+import { exportDnsTxt, exportDnsCsv } from '../utils/export';
 
 const isBrowser = !window.electronAPI;
 
@@ -43,44 +44,6 @@ const DEMO_RESULTS = [
   { type: 'MX', value: 'smtp.google.com', priority: 10, ttl: null },
   { type: 'TXT', value: 'v=spf1 include:_spf.google.com ~all', ttl: null },
 ];
-
-export function exportDnsTxt({ host, type, server, results }) {
-  const ts = new Date().toLocaleString();
-  const lines = [
-    '========================================',
-    '  Hana - Network Utility',
-    '  DNS Lookup Report',
-    '========================================',
-    `Host       : ${host}`,
-    `Record Type: ${type}`,
-    `DNS Server : ${server}`,
-    `Timestamp  : ${ts}`,
-    '',
-    '--- Results ---',
-    ...results.map(r =>
-      `${r.type.padEnd(6)} ${r.value}${r.priority != null ? ` (priority: ${r.priority})` : ''}${r.ttl != null ? ` TTL: ${r.ttl}s` : ''}`
-    ),
-  ];
-  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `dns_${host}_${Date.now()}.txt`;
-  a.click();
-}
-
-export function exportDnsCsv({ host, type, server, results }) {
-  const ts = new Date().toLocaleString();
-  const rows = [
-    ['Type', 'Value', 'Priority', 'TTL', 'Host', 'DNS_Server', 'Timestamp'],
-    ...results.map(r => [r.type, r.value, r.priority ?? '', r.ttl ?? '', host, server, ts]),
-  ];
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `dns_${host}_${Date.now()}.csv`;
-  a.click();
-}
 
 export default function DnsLookup() {
   const [host, setHost]           = useState('');
