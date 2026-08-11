@@ -1,5 +1,21 @@
 # Hana - Network Utility — Changelog
 
+<!--
+  RELEASE CONVENTION
+
+  Work that has landed on main but has no version number yet goes under an
+  "## Unreleased" heading, written in the same user-facing voice as the version
+  sections below. At release time, rename that one heading to
+  "## vX.Y.Z — <Month Year>" — nothing else needs editing, and nothing needs
+  deleting.
+
+  The release workflow builds its GitHub release body by matching "## <tag>"
+  exactly, so an "## Unreleased" section is invisible to it until renamed. Keep
+  notes-to-self in THIS comment rather than inside a version section: anything
+  inside the section is copied verbatim into the published release notes.
+-->
+
+
 ---
 
 ## Backlog — Pending Security & Reliability Work
@@ -157,6 +173,29 @@ thousands of entries.
 - Sort results so live hosts always appear first within the visible set
 - Show a summary line: "▼ Show all 1022 results" when collapsed
 - Show "▲ Collapse" when expanded
+
+---
+
+## Unreleased
+
+### DNS Lookup exports handle every record value
+
+CSV exports from DNS Lookup now escape values that contain double quotes —
+common in TXT records such as SPF and DKIM — so each value stays in its own
+column. Exported cells are also protected against being read as formulas by
+Excel, Sheets, and LibreOffice, matching the handling already used by the other
+export modules.
+
+Port Scanner exports moved onto the same shared code path.
+
+> If an earlier DNS export looked misaligned when opened in a spreadsheet,
+> exporting it again will produce a correctly formed file.
+
+### Additional fixes
+
+- Port Scanner exports no longer reorder the on-screen results as a side effect.
+- Export filenames from DNS Lookup and Port Scanner now use the same readable
+  timestamp as every other module.
 
 ---
 
